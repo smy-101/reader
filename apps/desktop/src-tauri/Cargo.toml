@@ -15,4 +15,5 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# devtools:release 构建也允许 F12 开发者工具——壳内白屏/启动崩摧时能直读控制台(诊断用,个人工具无泄露顾虑)
+tauri = { version = "2", features = ["devtools"] }

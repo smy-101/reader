@@ -6,7 +6,28 @@
     <title>Reader · AI 阅读器</title>
 </head>
 <body>
-<div id="root"></div>
+<div id="root">
+    <!-- 启动占位:React createRoot 首次渲染会清空容器内容;若一直停留在此,说明模块脚本未加载(壳内自诊断) -->
+    <div id="boot-placeholder" style="max-width:420px;margin:20vh auto 0;text-align:center;color:#57606a;font:15px/1.8 system-ui,sans-serif">
+        正在启动 Reader…<br/>
+        <span style="font-size:13px">若长时间停留在此页,说明前端脚本未能加载(请截图/拍照反馈)</span>
+    </div>
+</div>
+<script>
+    // 启动期自诊断(壳内无控制台也能看到):未捕获错误以底部横幅透出,便于排障。
+    // 过滤 ResizeObserver loop 等良性噪声(foliate 渲染常态触发);横幅 pointer-events:none 永不阻断交互。
+    window.addEventListener('error', function (e) {
+        var msg = e.message || String(e.error) || 'unknown'
+        if (/ResizeObserver loop|Script error/.test(msg)) return
+        if (document.getElementById('boot-error-banner')) return
+        var el = document.createElement('pre')
+        el.id = 'boot-error-banner'
+        el.style.cssText = 'position:fixed;left:0;right:0;bottom:0;margin:0;padding:10px 14px;' +
+            'background:#3d1d20;color:#ffb4ab;font:12px/1.6 monospace;white-space:pre-wrap;word-break:break-all;z-index:99999;pointer-events:none'
+        el.textContent = '错误:' + msg
+        document.body.appendChild(el)
+    })
+</script>
 <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>
