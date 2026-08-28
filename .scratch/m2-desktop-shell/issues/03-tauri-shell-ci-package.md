@@ -4,10 +4,10 @@
 
 **Blocked by:** 02(壳的可用性依赖运行时连接设置——打包产物里 token 只能经它配置;壳本身零逻辑)
 
-**Status:** ready-for-agent
+**Status:** code-complete(待 push 后 CI windows job 绿 + artifact 人工烟测,随 04 记档转 done)
 
-- [ ] apps/desktop 就位:Tauri 2 默认模板 + 配置(指向 apps/web 构建产物、窗口、NSIS),无任何自定义 Rust 业务逻辑
-- [ ] CI windows job 绿,产出 NSIS 安装包 artifact 并可下载
+- [x] apps/desktop 就位:Tauri 2 默认模板 + 配置(指向 apps/web 构建产物、窗口、NSIS),无任何自定义 Rust 业务逻辑
+- [ ] CI windows job 绿,产出 NSIS 安装包 artifact 并可下载(待 push 触发验证)
 - [ ] artifact 安装包在 Windows 上安装成功,应用可启动、加载的 UI 与 web 端一致(人工烟测)
-- [ ] 打包 job 与 backend / web job 互不干扰(Playwright E2E 仍留在 ubuntu)
-- [ ] ADR-0006 落档(编号顺延现有 5 篇,内容见 What to build)
+- [x] 打包 job 与 backend / web job 互不干扰(Playwright E2E 仍留在 ubuntu;打包 job 触发时机取 push-to-main + 手动,ADR-0006)
+- [x] ADR-0006 落档(编号顺延现有 5 篇,内容见 What to build)

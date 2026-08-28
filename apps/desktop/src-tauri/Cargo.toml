@@ -1,0 +1,18 @@
+[package]
+name = "reader-desktop"
+version = "0.1.0"
+description = "Reader 桌面壳(Tauri 2,零自定义 Rust 逻辑,见 ADR-0006)"
+edition = "2021"
+
+# 壳零业务逻辑(D-7):不注册任何 command,不引 serde——
+# 一切功能与测试留在 apps/web 与后端两个既有 seam,壳只做打包。
+
+[lib]
+name = "reader_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }

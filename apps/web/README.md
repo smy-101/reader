@@ -29,8 +29,8 @@ global-setup 自编排:Docker 起 `pgvector/pgvector:pg18` → `mvn -DskipTests 
 系统缺 chromium 依赖与字体时(报 `libnspr4.so` 缺失或元素高度为 0),用用户级补丁:
 
 ```bash
-export LD_LIBRARY_PATH=$HOME/.local/pw-libs/extracted/usr/lib   # 解包的 Arch 包库
-export FONTCONFIG_FILE=$HOME/.local/pw-libs/fonts.conf          # 用户字体(Noto CJK)
+export LD_LIBRARY_PATH=$HOME/.local/pw-libs/root/usr/lib   # 解包的 Arch 包库
+export FONTCONFIG_FILE=$HOME/.local/pw-libs/fonts.conf      # 用户字体(Noto CJK)
 npx playwright test
 ```
 
