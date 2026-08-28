@@ -35,7 +35,7 @@ public class ApiExceptionHandler {
     @ExceptionHandler({MaxUploadSizeExceededException.class, MultipartException.class})
     public ResponseEntity<Map<String, String>> tooLarge(Exception e) {
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
-                .body(Map.of("error", "文件超过 100MB 上限"));
+                .body(Map.of("error", "文件超过上传大小上限"));
     }
 
     @ExceptionHandler(NoSuchElementException.class)

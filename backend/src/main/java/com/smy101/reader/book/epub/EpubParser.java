@@ -18,6 +18,16 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /**
+ * 字体混淆算法白名单:合法的字体保护手段,不算 DRM(会被部分 EPUB 使用)。
+ * 见 EPUB OCF 3.x:字体混淆不是内容加密,阅读器可自解,不影响正文解析。
+ */
+record FontObfuscationWhitelist() {
+    static final java.util.Set<String> ALGORITHMS = java.util.Set.of(
+            "http://www.idpf.org/2008/embedding",   // IDPF 字体混淆
+            "http://ns.adobe.com/pdf/enc#RC");      // Adobe 字体混淆
+}
+
+/**
  * EPUB 同步解析器(FR-101,D-41:无异步任务)。
  * <p>
  * zip → container.xml → OPF(manifest/spine/metadata)→ 章节正文清洗(D-40)与封面。
@@ -39,8 +49,9 @@ public class EpubParser {
     public ParsedEpub parse(byte[] bytes) {
         Map<String, byte[]> entries = readZip(bytes);
 
-        // DRM 识别在解析之前(D-29):有加密标记即拒,不解密
-        if (entries.containsKey(ENCRYPTION_PATH)) {
+        // DRM 识别在解析之前(D-29):encryption.xml 存在且含非字体混淆的加密 → 拒,不解密;
+        // 仅有字体混淆(合法的字体保护)不拦,避免误杀真实书库的书
+        if (entries.containsKey(ENCRYPTION_PATH) && hasNonFontEncryption(entries.get(ENCRYPTION_PATH))) {
             throw new EpubDrmException("疑似 DRM 保护,不支持导入");
         }
 
@@ -80,6 +91,10 @@ public class EpubParser {
         Element spine = opf.selectFirst("spine");
         if (spine != null) {
             for (Element itemref : spine.select("itemref")) {
+                // 非线性内容(linear="no",如答案页/备注页)不属于阅读顺序,不入库(D-40)
+                if ("no".equalsIgnoreCase(itemref.attr("linear"))) {
+                    continue;
+                }
                 Element item = manifest.get(itemref.attr("idref"));
                 if (item == null || !isContentDoc(item)) {
                     continue;
@@ -99,7 +114,7 @@ public class EpubParser {
                 }
                 chapters.add(new ParsedEpub.ParsedChapter(
                         chapters.size() + 1,
-                        chapterTitle(navTitles, href, content),
+                        chapterTitle(navTitles, href, doc),
                         href,
                         content));
             }
@@ -134,21 +149,23 @@ public class EpubParser {
         return type.equals("application/xhtml+xml") || type.equals("text/html");
     }
 
-    // ---- 章节标题:nav 目录优先,退回首标题 ----
+    // ---- 章节标题:nav 目录优先,退回正文首个标题(ADR-0005),再退回 NULL ----
 
     private Map<String, String> readNavTitles(Map<String, byte[]> entries, String opfPath, Map<String, Element> manifest) {
         for (Element item : manifest.values()) {
             if (!item.attr("properties").contains("nav")) {
                 continue;
             }
-            byte[] nav = entries.get(resolveHref(opfPath, item.attr("href")));
+            // nav 内 href 相对 nav 文档自身路径解析(nav 与 OPF 可能不同目录)
+            String navPath = resolveHref(opfPath, item.attr("href"));
+            byte[] nav = entries.get(navPath);
             if (nav == null) {
                 continue;
             }
             Map<String, String> titles = new HashMap<>();
             Document navDoc = Jsoup.parse(new String(nav, java.nio.charset.StandardCharsets.UTF_8), "");
             for (Element a : navDoc.select("nav a[href]")) {
-                String href = resolveHref(opfPath, a.attr("href").split("#")[0]);
+                String href = resolveHref(navPath, a.attr("href").split("#")[0]);
                 titles.putIfAbsent(href, a.text().strip());
             }
             return titles;
@@ -156,16 +173,20 @@ public class EpubParser {
         return Map.of();
     }
 
-    private String chapterTitle(Map<String, String> navTitles, String href, String content) {
+    private String chapterTitle(Map<String, String> navTitles, String href, byte[] chapterDoc) {
         String navTitle = navTitles.get(href);
         if (navTitle != null && !navTitle.isBlank()) {
             return navTitle;
         }
-        // 退路:正文首个标题行
-        for (String line : content.split("\n")) {
-            String stripped = line.strip();
-            if (!stripped.isEmpty()) {
-                return stripped;
+        // 退路:正文首个 h1-h6(ADR-0005;无标题则 NULL,不拿普通段落凑数)
+        Document doc = Jsoup.parse(new String(chapterDoc, java.nio.charset.StandardCharsets.UTF_8), href);
+        for (String tag : List.of("h1", "h2", "h3", "h4", "h5", "h6")) {
+            Element heading = doc.selectFirst(tag);
+            if (heading != null) {
+                String text = heading.text().strip();
+                if (!text.isEmpty()) {
+                    return text;
+                }
             }
         }
         return null;
@@ -206,6 +227,23 @@ public class EpubParser {
             ext = "img";
         }
         return new ParsedEpub.ParsedCover(bytes, ext);
+    }
+
+    /** encryption.xml 中存在非字体混淆的加密项 → 视为 DRM。 */
+    private boolean hasNonFontEncryption(byte[] encryptionXml) {
+        Document enc = parseXml(encryptionXml, ENCRYPTION_PATH);
+        // EncryptedData/EncryptionMethod@Algorithm(命名空间前缀无关匹配)
+        java.util.List<Element> methods = enc.select("EncryptionMethod");
+        if (methods.isEmpty()) {
+            return true; // 无法判定加密内容,保守拦截
+        }
+        for (Element method : methods) {
+            String algorithm = method.attr("Algorithm");
+            if (algorithm == null || !FontObfuscationWhitelist.ALGORITHMS.contains(algorithm)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ---- zip / xml 基建 ----

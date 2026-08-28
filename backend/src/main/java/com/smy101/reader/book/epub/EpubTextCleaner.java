@@ -40,14 +40,24 @@ final class EpubTextCleaner {
         }
 
         List<String> footnoteTexts = new ArrayList<>();
-        for (Element el : doc.body().select("*").stream().toList()) {
-            if (isFootnote(el)) {
-                String text = el.text().strip();
-                if (!text.isEmpty()) {
-                    footnoteTexts.add(text);
-                }
-                el.remove();
+        // 嵌套脚注(如 aside 内带脚注属性的子元素)只取最外层,避免同一文本重复入章末;
+        // 判定必须在任何移除前完成(移除后 ancestors 链断);追加顺序保持文档顺序
+        List<Element> footnotes = doc.body().select("*").stream()
+                .filter(EpubTextCleaner::isFootnote)
+                .toList();
+        java.util.Set<Element> outermost = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        footnotes.stream()
+                .filter(el -> el.parents().stream().noneMatch(footnotes::contains))
+                .forEach(outermost::add);
+        for (Element el : footnotes) {
+            if (!outermost.contains(el)) {
+                continue;
             }
+            String text = el.text().strip();
+            if (!text.isEmpty()) {
+                footnoteTexts.add(text);
+            }
+            el.remove();
         }
 
         flattenTables(doc);

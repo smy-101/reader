@@ -11,16 +11,17 @@
 
 spine 按阅读顺序遍历,每个内容文件(xhtml/html)清洗为纯文本;**是否构成章节**:
 
-1. **EPUB3 nav 文档(`properties` 含 `nav`)不入库**——目录是导航视图,不是章节;
-2. 清洗后正文为空的 spine 项(如纯图片封面页)不入库;
-3. 其余按顺序入库,`seq` 为**保留后的连续序号**(从 1 起),不用原始 spine 下标。
+1. **EPUB3 nav 文档(`properties` 含 `nav`)不入库**——目录是导航视图,不是章节;nav 内 href 相对 nav 文档自身路径解析(nav 与 OPF 可能不同目录);
+2. **`linear="no"` 的 spine 项不入库**——非线性内容(答案页等)不属于阅读顺序;
+3. 清洗后正文为空的 spine 项(如纯图片封面页)不入库;
+4. 其余按顺序入库,`seq` 为**保留后的连续序号**(从 1 起),不用原始 spine 下标。
 
 **正文清洗规则**(按序作用于 xhtml DOM):
 
 | 规则 | 处理 |
 |---|---|
-| 丢图 | `img/svg/picture/audio/video/source/map/object/embed` 整体移除,alt/文件名一并丢弃 |
-| 脚注 | `epub:type` 含 `footnote`(或 `rearnote`)、`role=doc-footnote` 的元素从原位置摘出,正文以「脚注:」前缀**逐条追加在章末**;正文中的上标引用记号(如 `[1]`)保留 |
+| 丢图 | `img/svg/picture/audio/video/source/track/map/object/embed` 等媒体元素整体移除,alt/文件名一并丢弃 |
+| 脚注 | `epub:type` 含 `footnote`(或 `rearnote`)、`role=doc-footnote` 的元素从原位置摘出(**嵌套脚注只取最外层**),正文以「脚注:」前缀**逐条追加在章末**(文档顺序);正文中的上标引用记号(如 `[1]`)保留 |
 | 表格 | 最外层 `table` 整体拍平:每行单元格文字以单空格连接,行与行以换行分隔;嵌套表不重复计行 |
 | 代码块 | `pre` 块取未归一化文本(保留原始换行与缩进) |
 | 普通块 | `p/h1-h6/li/blockquote/figcaption/div/dt/dd` 取归一化空白文本(连续空白折叠为单空格),**只取最外层块**(嵌套如 `div>p` 只由 `p` 出字) |

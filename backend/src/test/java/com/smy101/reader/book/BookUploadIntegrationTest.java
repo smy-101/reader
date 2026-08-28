@@ -46,14 +46,19 @@ class BookUploadIntegrationTest extends IntegrationTestBase {
         assertThat((Boolean) JsonPath.read(body, "duplicate")).isFalse();
         assertThat((String) JsonPath.read(body, "coverUrl")).isEqualTo("/api/books/" + JsonPath.read(body, "id") + "/cover");
 
-        // 章节:仅"有正文的内容文件"入库,nav 不产生章节(D-40,User Story 9)
+        // 章节:仅"有正文的内容文件"入库,nav 不产生章节,linear="no" 不入阅读顺序(D-40)
         List<String> seqs = JsonPath.read(body, "chapters[?(@.href != null)].href");
-        assertThat(seqs).containsExactly("OEBPS/ch1.xhtml", "OEBPS/ch2.xhtml", "OEBPS/ch3.xhtml");
+        assertThat(seqs).containsExactly(
+                "OEBPS/ch1.xhtml", "OEBPS/ch2.xhtml", "OEBPS/ch3.xhtml", "OEBPS/ch5.xhtml");
         assertThat((String) JsonPath.read(body, "chapters[0].title")).isEqualTo("第一章 起点");
+        assertThat(body).doesNotContain("附录答案页"); // ch4 linear="no" 不入库
+        assertThat((Object) JsonPath.read(body, "chapters[3].title"))
+                .as("无标题且不在目录中的章,标题应为 NULL(ADR-0005)")
+                .isNull();
 
-        // DB:1 行 book + 3 行 chapter
+        // DB:1 行 book + 4 行 chapter
         assertThat(countTable("book")).isEqualTo(1);
-        assertThat(countTable("chapter")).isEqualTo(3);
+        assertThat(countTable("chapter")).isEqualTo(4);
 
         // 磁盘:书源文件与封面(User Story 6)
         assertThat(Files.readAllBytes(STORAGE_ROOT.resolve("books/" + hash + ".epub"))).isEqualTo(epub);
@@ -85,20 +90,24 @@ class BookUploadIntegrationTest extends IntegrationTestBase {
         assertThat(ch2).contains("Go 2009");
         assertThat(ch2).contains("表格之后仍有一段正文。");
 
-        // 第三章:代码块原样保留(含换行);脚注正文不在原位置、并入章末
+        // 第三章:代码块原样保留(含换行);脚注正文不在原位置、并入章末;
+        // 嵌套脚注只取最外层,同一文本不重复入章末
         String ch3 = chapterContent(3);
         assertThat(ch3).contains("public class Main {\n    public static void main(String[] args) {");
         assertThat(ch3).contains("System.out.println(\"hello\");");
         assertThat(ch3.indexOf("这是脚注一的正文内容。"))
                 .as("脚注并入章末,应出现在末段正文之后")
                 .isGreaterThan(ch3.indexOf("脚注元素本体不应出现在原位置"));
+        assertThat(ch3.split("嵌套内层脚注不应重复入章末", -1).length - 1)
+                .as("嵌套脚注不重复")
+                .isEqualTo(1);
     }
 
     @Test
     void text_length等于清洗后正文字符数() throws IOException {
         upload(readFixture("normal.epub"), "normal.epub");
 
-        for (int seq = 1; seq <= 3; seq++) {
+        for (int seq = 1; seq <= 4; seq++) {
             String content = chapterContent(seq);
             Integer textLength = jdbc.queryForObject(
                     "SELECT text_length FROM chapter WHERE seq = ?", Integer.class, seq);

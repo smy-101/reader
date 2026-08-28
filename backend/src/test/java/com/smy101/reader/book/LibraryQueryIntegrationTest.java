@@ -68,7 +68,7 @@ class LibraryQueryIntegrationTest extends IntegrationTestBase {
         assertThat((String) JsonPath.read(res.getBody(), "author")).isEqualTo("张三");
         assertThat((String) JsonPath.read(res.getBody(), "language")).isEqualTo("zh-CN");
         assertThat((String) JsonPath.read(res.getBody(), "fileHash")).isEqualTo(fileHash);
-        assertThat((Integer) JsonPath.read(res.getBody(), "chapterCount")).isEqualTo(3);
+        assertThat((Integer) JsonPath.read(res.getBody(), "chapterCount")).isEqualTo(4);
     }
 
     @Test
@@ -77,7 +77,7 @@ class LibraryQueryIntegrationTest extends IntegrationTestBase {
 
         assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
         List<Integer> seqs = JsonPath.read(res.getBody(), "$[?(@.seq)].seq");
-        assertThat(seqs).containsExactly(1, 2, 3);
+        assertThat(seqs).containsExactly(1, 2, 3, 4);
         assertThat((String) JsonPath.read(res.getBody(), "$[0].title")).isEqualTo("第一章 起点");
         assertThat((String) JsonPath.read(res.getBody(), "$[0].href")).isEqualTo("OEBPS/ch1.xhtml");
         // 列表不携带正文,避免书库浏览拖全文

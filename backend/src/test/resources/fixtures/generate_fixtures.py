@@ -43,11 +43,13 @@ OPF = """<?xml version="1.0" encoding="UTF-8"?>
     <meta name="cover" content="cover-image"/>
   </metadata>
   <manifest>
-    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="nav" href="../nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
     <item id="cover-image" href="cover.png" media-type="image/png" properties="cover-image"/>
     <item id="c1" href="ch1.xhtml" media-type="application/xhtml+xml"/>
     <item id="c2" href="ch2.xhtml" media-type="application/xhtml+xml"/>
     <item id="c3" href="ch3.xhtml" media-type="application/xhtml+xml"/>
+    <item id="c4" href="ch4.xhtml" media-type="application/xhtml+xml"/>
+    <item id="c5" href="ch5.xhtml" media-type="application/xhtml+xml"/>
     <item id="style" href="style.css" media-type="text/css"/>
   </manifest>
   <spine>
@@ -55,6 +57,8 @@ OPF = """<?xml version="1.0" encoding="UTF-8"?>
     <itemref idref="c1"/>
     <itemref idref="c2"/>
     <itemref idref="c3"/>
+    <itemref idref="c4" linear="no"/>
+    <itemref idref="c5"/>
   </spine>
 </package>
 """
@@ -65,9 +69,9 @@ NAV = """<?xml version="1.0" encoding="UTF-8"?>
 <body>
   <nav epub:type="toc">
     <ol>
-      <li><a href="ch1.xhtml">第一章 起点</a></li>
-      <li><a href="ch2.xhtml">第二章 表格与图片</a></li>
-      <li><a href="ch3.xhtml">第三章 代码与脚注</a></li>
+      <li><a href="OEBPS/ch1.xhtml">第一章 起点</a></li>
+      <li><a href="OEBPS/ch2.xhtml">第二章 表格与图片</a></li>
+      <li><a href="OEBPS/ch3.xhtml">第三章 代码与脚注</a></li>
     </ol>
   </nav>
 </body>
@@ -114,16 +118,45 @@ CH3 = """<?xml version="1.0" encoding="UTF-8"?>
     }
 }</code></pre>
   <aside epub:type="footnote" id="fn1"><p>这是脚注一的正文内容。</p></aside>
+  <aside epub:type="footnote" id="fn2"><p>外层脚注二<aside epub:type="footnote">嵌套内层脚注不应重复入章末</aside></p></aside>
   <p>脚注元素本体不应出现在原位置,应并入章末。</p>
 </body>
 </html>
 """
 
-ENCRYPTION_XML = """<?xml version="1.0" encoding="UTF-8"?>
+CH4 = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>ch4</title></head>
+<body>
+  <h1>附录答案页</h1>
+  <p>本页在 spine 中标记 linear="no"，不属于阅读顺序，不应入库。</p>
+</body>
+</html>
+"""
+
+CH5 = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>ch5</title></head>
+<body>
+  <p>这一章没有任何标题元素，也不在目录里，章节标题应为 NULL。</p>
+</body>
+</html>
+"""
+
+DRM = """<?xml version="1.0" encoding="UTF-8"?>
 <encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
   <EncryptedData xmlns="http://www.w3.org/2001/04/xmlenc#">
     <EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes128-cbc"/>
     <CipherData><CipherReference URI="OEBPS/ch1.xhtml"/></CipherData>
+  </EncryptedData>
+</encryption>
+"""
+
+FONT_OBFUSCATION = """<?xml version="1.0" encoding="UTF-8"?>
+<encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <EncryptedData xmlns="http://www.w3.org/2001/04/xmlenc#">
+    <EncryptionMethod Algorithm="http://www.idpf.org/2008/embedding"/>
+    <CipherData><CipherReference URI="OEBPS/fonts/body.otf"/></CipherData>
   </EncryptedData>
 </encryption>
 """
@@ -145,11 +178,13 @@ def build_normal() -> None:
     entries = [
         ("mimetype", b"application/epub+zip"),
         ("META-INF/container.xml", CONTAINER_XML.encode()),
+        ("nav.xhtml", NAV.encode()),  # nav 与 OPF 不同目录:验证 href 相对 nav 文档解析
         ("OEBPS/content.opf", OPF.encode()),
-        ("OEBPS/nav.xhtml", NAV.encode()),
         ("OEBPS/ch1.xhtml", CH1.encode()),
         ("OEBPS/ch2.xhtml", CH2.encode()),
         ("OEBPS/ch3.xhtml", CH3.encode()),
+        ("OEBPS/ch4.xhtml", CH4.encode()),
+        ("OEBPS/ch5.xhtml", CH5.encode()),
         ("OEBPS/cover.png", PNG_1PX),
         ("OEBPS/style.css", b"body{margin:0}"),
     ]
@@ -173,7 +208,7 @@ def build_drm() -> None:
     entries = [
         ("mimetype", b"application/epub+zip"),
         ("META-INF/container.xml", CONTAINER_XML.encode()),
-        ("META-INF/encryption.xml", ENCRYPTION_XML.encode()),
+        ("META-INF/encryption.xml", DRM.encode()),
         ("OEBPS/content.opf", OPF.encode()),
         ("OEBPS/nav.xhtml", NAV.encode()),
         ("OEBPS/ch1.xhtml", CH1.encode()),
@@ -182,10 +217,26 @@ def build_drm() -> None:
     write_epub(os.path.join(HERE, "drm.epub"), entries)
 
 
+def build_font_obfuscated() -> None:
+    """仅字体混淆(合法)的 EPUB:不应被 DRM 判定拦截,可正常导入。"""
+    entries = [
+        ("mimetype", b"application/epub+zip"),
+        ("META-INF/container.xml", CONTAINER_XML.encode()),
+        ("META-INF/encryption.xml", FONT_OBFUSCATION.encode()),
+        ("OEBPS/content.opf", OPF.encode()),
+        ("OEBPS/ch1.xhtml", CH1.encode()),
+        ("OEBPS/ch2.xhtml", CH2.encode()),
+        ("OEBPS/ch3.xhtml", CH3.encode()),
+        ("OEBPS/cover.png", PNG_1PX),
+    ]
+    write_epub(os.path.join(HERE, "font-obfuscated.epub"), entries)
+
+
 if __name__ == "__main__":
     build_normal()
     build_corrupt()
     build_drm()
-    for name in ("normal.epub", "corrupt.epub", "drm.epub"):
+    build_font_obfuscated()
+    for name in ("normal.epub", "corrupt.epub", "drm.epub", "font-obfuscated.epub"):
         p = os.path.join(HERE, name)
         print(name, os.path.getsize(p), "bytes")

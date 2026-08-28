@@ -38,7 +38,7 @@ class UploadGuardrailsIntegrationTest extends IntegrationTestBase {
 
         // 不重复解析、不新增行/文件
         assertThat(countTable("book")).isEqualTo(1);
-        assertThat(countTable("chapter")).isEqualTo(3);
+        assertThat(countTable("chapter")).isEqualTo(4);
         assertThat(countFilesIn("books")).isEqualTo(1);
         assertThat(countFilesIn("covers")).isEqualTo(1);
     }
@@ -68,6 +68,15 @@ class UploadGuardrailsIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void 仅字体混淆的合法EPUB不误拦_正常导入() throws IOException {
+        ResponseEntity<String> res = upload(BookUploadIntegrationTest.readFixture("font-obfuscated.epub"), "font.epub");
+
+        assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat((Boolean) JsonPath.read(res.getBody(), "duplicate")).isFalse();
+        assertThat(countTable("chapter")).isEqualTo(3);
+    }
+
+    @Test
     void 失败后同一本正常书仍可上传成功() throws IOException {
         // 防线不污染后续上传(先坏后好)
         upload(BookUploadIntegrationTest.readFixture("corrupt.epub"), "corrupt.epub");
@@ -75,7 +84,7 @@ class UploadGuardrailsIntegrationTest extends IntegrationTestBase {
 
         assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(countTable("book")).isEqualTo(1);
-        assertThat(countTable("chapter")).isEqualTo(3);
+        assertThat(countTable("chapter")).isEqualTo(4);
     }
 
     // ---- helpers ----

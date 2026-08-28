@@ -7,6 +7,7 @@ import com.smy101.reader.book.dto.UploadBookResponse;
 import com.smy101.reader.book.epub.EpubParser;
 import com.smy101.reader.book.epub.ParsedEpub;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -89,9 +90,20 @@ public class BookService {
 
         ParsedEpub parsed = epubParser.parse(epubBytes);
 
-        writeFiles(hash, parsed, epubBytes);
+        String coverPath = writeFiles(hash, parsed, epubBytes);
 
-        Book book = transactionTemplate.execute(tx -> insertBookAndChapters(hash, parsed, epubBytes));
+        Book book;
+        try {
+            book = transactionTemplate.execute(tx -> insertBookAndChapters(hash, parsed, coverPath, epubBytes));
+        } catch (DuplicateKeyException e) {
+            // 并发同 hash:另一请求已入库,退回幂等语义(D-30),文件同名无害
+            Book winner = bookMapper.selectOne(
+                    new LambdaQueryWrapper<Book>().eq(Book::getFileHash, hash));
+            if (winner != null) {
+                return toResponse(winner, true);
+            }
+            throw e;
+        }
         return toResponse(book, false);
     }
 
@@ -117,23 +129,26 @@ public class BookService {
                 chapterCount);
     }
 
-    private void writeFiles(String hash, ParsedEpub parsed, byte[] epubBytes) {
+    /** 落盘书源文件与封面,返回封面相对路径(无封面为 null);布局知识只在 FileStorage。 */
+    private String writeFiles(String hash, ParsedEpub parsed, byte[] epubBytes) {
         try {
+            String coverPath = null;
             if (parsed.cover() != null) {
-                fileStorage.saveCover(hash, parsed.cover().bytes(), parsed.cover().extension());
+                coverPath = fileStorage.saveCover(hash, parsed.cover().bytes(), parsed.cover().extension());
             }
             fileStorage.saveBookFile(hash, epubBytes);
+            return coverPath;
         } catch (IOException e) {
             throw new IllegalStateException("书源文件落盘失败", e);
         }
     }
 
-    private Book insertBookAndChapters(String hash, ParsedEpub parsed, byte[] epubBytes) {
+    private Book insertBookAndChapters(String hash, ParsedEpub parsed, String coverPath, byte[] epubBytes) {
         Book book = new Book();
         book.setTitle(parsed.title());
         book.setAuthor(parsed.author());
         book.setLanguage(parsed.language());
-        book.setCoverPath(parsed.cover() == null ? null : "covers/" + hash + "." + parsed.cover().extension());
+        book.setCoverPath(coverPath);
         book.setFileHash(hash);
         book.setFileSize((long) epubBytes.length);
         bookMapper.insert(book);
