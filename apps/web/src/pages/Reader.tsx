@@ -6,6 +6,7 @@ import type {FoliateView, RelocateDetail, TocItem} from '../reader/foliate-types
 import {loadSettings, saveSettings, THEME_COLORS, type ReaderSettings} from '../reader/settings'
 import {FOLIATE_VIEW_URL, loadFoliateModule} from '../reader/foliate-urls'
 import {useHighlights} from '../reader/useHighlights'
+import {useAutoReportProgress} from '../reader/useProgress'
 import {HighlightBar, HighlightListPanel} from '../components/Highlights'
 
 /**
@@ -23,14 +24,16 @@ export function Reader({bookId, onExit}: { bookId: number; onExit: () => void })
     const [view, setView] = useState<FoliateView | null>(null)
 
     const hl = useHighlights(view, bookId, status === 'ready')
+    useAutoReportProgress(view, bookId, status === 'ready')
 
-    // 打开书:详情(标题)+ 书源文件 → makeBook → view.open
+    // 打开书:详情(标题)+ 书源文件 + 服务端进度(接续到上次位置,FR-203)→ makeBook → view.open
     const openBook = useCallback(async (v: FoliateView) => {
         setView(v)
         setStatus('loading')
         setError(null)
         try {
-            const [books, blob] = await Promise.all([api.listBooks(), api.fetchBookFile(bookId)])
+            const [books, blob, progress] = await Promise.all([
+                api.listBooks(), api.fetchBookFile(bookId), api.getProgress(bookId)])
             const item = books.find(b => b.id === bookId)
             if (item) setMeta(item)
 
@@ -38,7 +41,8 @@ export function Reader({bookId, onExit}: { bookId: number; onExit: () => void })
             const file = new File([blob], `book-${bookId}.epub`, {type: 'application/epub+zip'})
             const book = await makeBook(file)
             await v.open(book)
-            await v.init({showTextStart: true}) // 接续进度是 M1-08 的事
+            // 接续:有服务端进度则回放到该 CFI,否则从头开始(M1-08)
+            await v.init(progress ? {lastLocation: progress.cfi} : {showTextStart: true})
 
             v.addEventListener('relocate', e => {
                 const detail = (e as CustomEvent<RelocateDetail>).detail
