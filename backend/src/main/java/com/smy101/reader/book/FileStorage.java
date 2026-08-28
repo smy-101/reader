@@ -4,6 +4,7 @@ import com.smy101.reader.config.ReaderProperties;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -30,9 +31,9 @@ public class FileStorage {
         return write(BOOKS_DIR + "/" + fileHash + ".epub", bytes);
     }
 
-    /** 按 file_hash 读取书源文件(M1-04 下载端点;books/<hash>.epub)。 */
-    public byte[] readBookFile(String fileHash) throws IOException {
-        return read(BOOKS_DIR + "/" + fileHash + ".epub");
+    /** 书源文件流式读取(M1-04:响应体不整体驻堆,书最大 100MB)。 */
+    public InputStream openBookFile(String fileHash) throws IOException {
+        return Files.newInputStream(root.resolve(BOOKS_DIR + "/" + fileHash + ".epub"));
     }
 
     /** 保存封面,返回相对 root 的路径(covers/<hash>.<ext>)。 */

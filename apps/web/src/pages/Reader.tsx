@@ -32,10 +32,15 @@ export function Reader({bookId, onExit}: { bookId: number; onExit: () => void })
         setStatus('loading')
         setError(null)
         try {
-            const [books, blob, progress] = await Promise.all([
-                api.listBooks(), api.fetchBookFile(bookId), api.getProgress(bookId)])
-            const item = books.find(b => b.id === bookId)
-            if (item) setMeta(item)
+            const [detail, blob, progress] = await Promise.all([
+                api.getBook(bookId), api.fetchBookFile(bookId), api.getProgress(bookId)])
+            setMeta({
+                id: detail.id,
+                title: detail.title,
+                author: detail.author,
+                coverUrl: detail.coverUrl,
+                progressPercent: progress?.percent ?? null,
+            })
 
             const {makeBook} = await loadFoliateModule<{ makeBook: (f: File) => Promise<unknown> }>(FOLIATE_VIEW_URL)
             const file = new File([blob], `book-${bookId}.epub`, {type: 'application/epub+zip'})

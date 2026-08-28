@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
@@ -69,10 +70,19 @@ public class BookService {
         return fileStorage.read(book.getCoverPath());
     }
 
-    /** 书源文件内容(M1-04);书不存在抛 NoSuchElementException(→ 404)。 */
-    public byte[] readBookFile(long bookId) throws IOException {
+    /** 书源文件流(M1-04);书不存在抛 NoSuchElementException(→ 404)。 */
+    public InputStream openBookFile(long bookId) {
         Book book = requireBook(bookId);
-        return fileStorage.readBookFile(book.getFileHash());
+        try {
+            return fileStorage.openBookFile(book.getFileHash());
+        } catch (IOException e) {
+            throw new IllegalStateException("书源文件读取失败", e);
+        }
+    }
+
+    /** 书源文件字节数(Content-Length;即上传时的 file_size)。 */
+    public long bookFileSize(long bookId) {
+        return requireBook(bookId).getFileSize();
     }
 
     /** 封面扩展名(决定响应 Content-Type);无封面返回 null。 */
@@ -124,13 +134,18 @@ public class BookService {
         return book;
     }
 
+    /** 封面 URL 口径唯一出处(有封面才有 URL;三处响应共用)。 */
+    static String coverUrl(Book book) {
+        return book.getCoverPath() == null ? null : "/api/books/" + book.getId() + "/cover";
+    }
+
     private BookDetail toDetail(Book book, int chapterCount) {
         return new BookDetail(
                 book.getId(),
                 book.getTitle(),
                 book.getAuthor(),
                 book.getLanguage(),
-                book.getCoverPath() == null ? null : "/api/books/" + book.getId() + "/cover",
+                coverUrl(book),
                 book.getFileHash(),
                 book.getFileSize(),
                 chapterCount);
@@ -183,7 +198,7 @@ public class BookService {
                 book.getTitle(),
                 book.getAuthor(),
                 book.getLanguage(),
-                book.getCoverPath() == null ? null : "/api/books/" + book.getId() + "/cover",
+                coverUrl(book),
                 book.getFileHash(),
                 book.getFileSize(),
                 duplicate,

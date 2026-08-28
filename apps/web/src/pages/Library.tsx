@@ -44,7 +44,7 @@ export function Library({onOpen}: { onOpen: (bookId: number) => void }) {
         <main className="library">
             <header className="library-header">
                 <h1>书库</h1>
-                <UploadPanel onDone={handleUploaded}/>
+                <UploadPanel onDone={handleUploaded} onOpenBook={onOpen}/>
             </header>
 
             <input

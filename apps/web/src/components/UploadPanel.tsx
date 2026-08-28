@@ -6,13 +6,18 @@ export interface UploadResult {
     status: 'added' | 'duplicate' | 'error'
     /** duplicate/error 时的可读文案 */
     message?: string
+    /** duplicate 时已在库的原书 id(跳转用,D-30) */
+    bookId?: number
 }
 
 /**
  * 上传面板(FR-101/D-43/D-30):多选后循环调单文件接口,逐本展示结果;
- * 重复书提示"已在书库",损坏/DRM/超限透出后端可读文案;单本失败不打断整批。
+ * 重复书提示"已在书库"并可跳到原书;损坏/DRM/超限透出后端可读文案;单本失败不打断整批。
  */
-export function UploadPanel({onDone}: { onDone: (results: UploadResult[]) => void }) {
+export function UploadPanel({onDone, onOpenBook}: {
+    onDone: (results: UploadResult[]) => void
+    onOpenBook: (bookId: number) => void
+}) {
     const inputRef = useRef<HTMLInputElement>(null)
     const [results, setResults] = useState<UploadResult[]>([])
     const [uploading, setUploading] = useState(false)
@@ -27,8 +32,8 @@ export function UploadPanel({onDone}: { onDone: (results: UploadResult[]) => voi
                 try {
                     const res = await api.uploadBook(file, file.name)
                     all.push(res.duplicate
-                        ? {name: file.name, status: 'duplicate', message: '已在书库'}
-                        : {name: file.name, status: 'added'})
+                        ? {name: file.name, status: 'duplicate', message: '已在书库', bookId: res.id}
+                        : {name: file.name, status: 'added', bookId: res.id})
                 } catch (e) {
                     all.push({
                         name: file.name,
@@ -69,6 +74,15 @@ export function UploadPanel({onDone}: { onDone: (results: UploadResult[]) => voi
                                 {r.status === 'duplicate' && (r.message ?? '已在书库')}
                                 {r.status === 'error' && `失败:${r.message}`}
                             </span>
+                            {r.status === 'duplicate' && r.bookId != null && (
+                                <button
+                                    className="jump"
+                                    data-testid="open-existing-book"
+                                    onClick={() => onOpenBook(r.bookId!)}
+                                >
+                                    打开原书
+                                </button>
+                            )}
                         </li>
                     ))}
                 </ul>

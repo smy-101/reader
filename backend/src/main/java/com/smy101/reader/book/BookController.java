@@ -6,6 +6,8 @@ import com.smy101.reader.book.dto.ChapterListItem;
 import com.smy101.reader.book.dto.UploadBookResponse;
 import com.smy101.reader.reading.ReadingService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
 
@@ -53,7 +56,7 @@ public class BookController {
                         book.getId(),
                         book.getTitle(),
                         book.getAuthor(),
-                        book.getCoverPath() == null ? null : "/api/books/" + book.getId() + "/cover",
+                        BookService.coverUrl(book),
                         percents.get(book.getId())))
                 .toList();
     }
@@ -79,14 +82,15 @@ public class BookController {
                 .body(bytes);
     }
 
-    /** 书源文件下载(M1-04):渲染引擎带 token 程序化拉取完整 EPUB。 */
+    /** 书源文件下载(M1-04):流式返回完整 EPUB,渲染引擎带 token 程序化拉取。 */
     @GetMapping("/{id}/file")
-    public ResponseEntity<byte[]> file(@PathVariable long id) throws IOException {
-        byte[] bytes = bookService.readBookFile(id);
+    public ResponseEntity<Resource> file(@PathVariable long id) {
+        InputStream in = bookService.openBookFile(id);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType("application/epub+zip"))
+                .contentLength(bookService.bookFileSize(id))
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         ContentDisposition.attachment().filename("book-" + id + ".epub").build().toString())
-                .body(bytes);
+                .body(new InputStreamResource(in));
     }
 }

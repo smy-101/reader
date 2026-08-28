@@ -12,47 +12,45 @@ export interface PendingSelection {
 
 type OverlayerModule = { Overlayer: { highlight: unknown } }
 
+/** overlayer 模块单例(懒加载一次;所有绘制路径先 await 它,保证 draw-annotation 时已就绪)。 */
+let overlayerPromise: Promise<OverlayerModule> | null = null
+
+function ensureOverlayer(): Promise<OverlayerModule> {
+    overlayerPromise ??= loadFoliateModule<OverlayerModule>(FOLIATE_OVERLAYER_URL)
+    return overlayerPromise
+}
+
 /**
  * 划线域(M1-07,FR-202/D-24):打开书全量拉取并渲染;创建/改色/改备注/删除即时同步;
  * 高亮绘制走 foliate-js overlayer(draw-annotation 事件)。
  */
-export function useHighlights(view: FoliateView | null, bookId: number, onOpen: boolean) {
+export function useHighlights(view: FoliateView | null, bookId: number, bookReady: boolean) {
     const [highlights, setHighlights] = useState<Highlight[]>([])
     const [selection, setSelection] = useState<PendingSelection | null>(null)
     const [editing, setEditing] = useState<Highlight | null>(null)
     const byCfiRef = useRef(new Map<string, Highlight>())
-    const overlayerRef = useRef<OverlayerModule | null>(null)
-
-    // Overlayer 绘制函数(懒加载 vendor 模块一次)
-    useEffect(() => {
-        if (!view) return
-        if (!overlayerRef.current) {
-            void loadFoliateModule<OverlayerModule>(FOLIATE_OVERLAYER_URL).then(m => {
-                overlayerRef.current = m
-            })
-        }
-    }, [view])
 
     // 打开书:全量拉取划线(D-24),逐条画上;并挂选中监听
     useEffect(() => {
-        if (!view || !onOpen) return
+        if (!view || !bookReady) return
         let alive = true
         byCfiRef.current = new Map()
         setHighlights([])
-        api.listHighlights(bookId).then(list => {
-            if (!alive) return
-            setHighlights(list)
-            for (const h of list) {
-                byCfiRef.current.set(h.cfi, h)
-                void view.addAnnotation({value: h.cfi, color: h.color ?? undefined})
-            }
-        }).catch(() => {
+        void ensureOverlayer().then(() =>
+            api.listHighlights(bookId).then(async list => {
+                if (!alive) return
+                setHighlights(list)
+                for (const h of list) {
+                    byCfiRef.current.set(h.cfi, h)
+                    await view.addAnnotation({value: h.cfi, color: h.color ?? undefined})
+                }
+            })).catch(() => {
             // 拉取失败不阻断阅读;列表为空,创建仍可用
         })
         return () => {
             alive = false
         }
-    }, [view, bookId, onOpen])
+    }, [view, bookId, bookReady])
 
     // view 事件:绘制样式 + 点击已有高亮 + 选中监听(只依赖 view:load 在 open() 期间就会触发,
     // 等到 ready 再挂会错过首批内容 doc)
@@ -61,7 +59,8 @@ export function useHighlights(view: FoliateView | null, bookId: number, onOpen: 
 
         const onDraw = (e: Event) => {
             const {draw, annotation} = (e as CustomEvent<{ draw: (fn: unknown, opts: { color: string }) => void; annotation: { color?: string | null } }>).detail
-            draw(overlayerRef.current?.Overlayer.highlight ?? {}, {color: annotation.color ?? 'yellow'})
+            // overlayer 已由 ensureOverlayer 预热(拉取/创建前都 await 过),此处同步可用
+            void ensureOverlayer().then(m => draw(m.Overlayer.highlight, {color: annotation.color ?? 'yellow'}))
         }
         const onShow = (e: Event) => {
             const {value} = (e as CustomEvent<{ value: string }>).detail
@@ -115,6 +114,7 @@ export function useHighlights(view: FoliateView | null, bookId: number, onOpen: 
             refreshMap(next)
             return next
         })
+        await ensureOverlayer()
         void view?.addAnnotation({value: created.cfi, color: created.color ?? undefined})
         return created
     }, [bookId, view, refreshMap])

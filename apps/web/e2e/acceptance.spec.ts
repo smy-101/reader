@@ -1,5 +1,6 @@
 import {expect, test} from '@playwright/test'
 import {resetBackend} from './global-setup'
+import {dragSelectFirstParagraph, renderedText, serverProgress, waitForRendered} from './helpers'
 
 /**
  * M1 验收标准原文落成自动化用例:“浏览器读书,刷新/换设备进度划线不丢”。
@@ -26,7 +27,8 @@ test('M1 验收:读书→划线→刷新→进度划线不丢→第二设备接�
     await page.getByTestId('toc-item').filter({hasText: '卷二 · 后出师表'}).click()
     await expect.poll(() => renderedText(page)).toContain('后出师表')
 
-    const percentBefore = await stableReportedPercent(page)
+    await expect.poll(() => serverProgress(page), {timeout: 15_000}).not.toBeNull()
+    const percentBefore = (await serverProgress(page))!.percent
 
     // ---- 在第二章划一条线 ----
     await dragSelectFirstParagraph(page)
@@ -65,51 +67,3 @@ test('M1 验收:读书→划线→刷新→进度划线不丢→第二设备接�
     await expect(pageB.getByTestId('highlight-item')).toHaveCount(1)
     await deviceB.close()
 })
-
-// ---- helpers ----
-
-async function waitForRendered(page: import('@playwright/test').Page) {
-    await expect.poll(() => page.evaluate(() =>
-        (document.querySelector('foliate-view') as any)?.renderer?.getContents?.()[0]?.doc?.body?.innerText ?? '',
-    )).not.toBe('')
-}
-
-function renderedText(page: import('@playwright/test').Page) {
-    return page.evaluate(() =>
-        (document.querySelector('foliate-view') as any).renderer.getContents()[0].doc.body.innerText as string)
-}
-
-/** 等进度节流上报落库,返回稳定的服务端百分比(0-100)。 */
-async function stableReportedPercent(page: import('@playwright/test').Page): Promise<number> {
-    await expect.poll(async () => serverProgress(page), {timeout: 15_000}).not.toBeNull()
-    return (await serverProgress(page))!.percent
-}
-
-async function serverProgress(page: import('@playwright/test').Page): Promise<{ percent: number } | null> {
-    return page.evaluate(async () => {
-        const res = await fetch('/api/books/1/progress', {
-            headers: {Authorization: 'Bearer reader-dev-token'},
-        })
-        if (!res.ok) return null
-        return {percent: (await res.json()).percent}
-    })
-}
-
-/** 拖拽选中当前章第一段(真实手势,spike 已验证 CDP 通道)。 */
-async function dragSelectFirstParagraph(page: import('@playwright/test').Page) {
-    const {x1, x2, y} = await page.evaluate(() => {
-        const view = document.querySelector('foliate-view') as any
-        const content = view.renderer.getContents()[0]
-        const frame = content.doc.defaultView.frameElement as HTMLIFrameElement
-        const fr = frame.getBoundingClientRect()
-        const p = content.doc.querySelector('p') as HTMLElement
-        const r = p.getBoundingClientRect()
-        return {x1: fr.x + r.left + r.width * 0.15, x2: fr.x + r.left + r.width * 0.85, y: fr.y + r.top + r.height / 2}
-    })
-    await page.mouse.move(x1, y)
-    await page.mouse.down()
-    await page.mouse.move(x1 + (x2 - x1) / 2, y, {steps: 5})
-    await page.mouse.move(x2, y, {steps: 10})
-    await page.mouse.up()
-    await expect(page.getByTestId('highlight-bar')).toBeVisible()
-}

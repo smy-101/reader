@@ -24,6 +24,17 @@ export interface ChapterSummary {
     textLength: number;
 }
 
+export interface BookDetail {
+    id: number;
+    title: string;
+    author: string | null;
+    language: string | null;
+    coverUrl: string | null;
+    fileHash: string;
+    fileSize: number;
+    chapterCount: number;
+}
+
 export interface UploadBookResponse {
     id: number;
     title: string;
@@ -135,6 +146,11 @@ export function createClient({baseUrl = '', token}: ClientOptions) {
         /** 书库列表(FR-103):新上传在前 */
         listBooks(): Promise<BookListItem[]> {
             return request<BookListItem[]>('/api/books')
+        },
+
+        /** 书籍详情(含章节数等完整元数据)。 */
+        getBook(bookId: number): Promise<BookDetail> {
+            return request<BookDetail>(`/api/books/${bookId}`)
         },
 
         /** 上传 EPUB(FR-101);duplicate=true 表示已在书库(D-30) */

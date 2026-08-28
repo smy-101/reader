@@ -30,8 +30,7 @@ export function HighlightBar({
     const [editNote, setEditNote] = useState('')
     const [busy, setBusy] = useState(false)
 
-    // 编辑对象切换时重置备注草稿(key 不随 updatedAt 变,避免每次更新重挂丢失输入);
-    // hooks 必须在早退之前 unconditional 调用
+    // hooks 必须在早退之前无条件调用;编辑对象切换时重置备注草稿
     useEffect(() => {
         setEditNote(editing?.note ?? '')
     }, [editing?.id])
@@ -52,20 +51,11 @@ export function HighlightBar({
             {selection && !editing && (
                 <>
                     <span className="bar-title" data-testid="selection-text">{snippet(selection.text, 40)}</span>
-                    <span className="swatches" role="radiogroup" aria-label="划线颜色">
-                        {HIGHLIGHT_COLORS.map(c => (
-                            <button
-                                key={c.id}
-                                role="radio"
-                                aria-checked={color === c.id}
-                                className={`swatch ${color === c.id ? 'active' : ''}`}
-                                style={{background: c.hex}}
-                                title={c.label}
-                                data-testid={`color-${c.id}`}
-                                onClick={() => setColor(c.id)}
-                            />
-                        ))}
-                    </span>
+                    <Swatches
+                        selected={color}
+                        onSelect={setColor}
+                        testPrefix="color"
+                    />
                     <input
                         className="note-input"
                         type="text"
@@ -92,21 +82,11 @@ export function HighlightBar({
             {editing && (
                 <>
                     <span className="bar-title" data-testid="editing-text">{snippet(editing.text, 40)}</span>
-                    <span className="swatches" role="radiogroup" aria-label="划线颜色">
-                        {HIGHLIGHT_COLORS.map(c => (
-                            <button
-                                key={c.id}
-                                role="radio"
-                                aria-checked={(editing.color ?? 'yellow') === c.id}
-                                className={`swatch ${(editing.color ?? 'yellow') === c.id ? 'active' : ''}`}
-                                style={{background: c.hex}}
-                                title={c.label}
-                                data-testid={`edit-color-${c.id}`}
-                                disabled={busy}
-                                onClick={() => void guard(() => onUpdate(editing.id, {color: c.id}))}
-                            />
-                        ))}
-                    </span>
+                    <Swatches
+                        selected={editing.color ?? 'yellow'}
+                        onSelect={c => void guard(() => onUpdate(editing.id, {color: c}))}
+                        testPrefix="edit-color"
+                    />
                     <input
                         className="note-input"
                         type="text"
@@ -114,13 +94,14 @@ export function HighlightBar({
                         value={editNote}
                         onChange={e => setEditNote(e.target.value)}
                         onKeyDown={e => e.key === 'Enter'
-                            && void guard(() => onUpdate(editing.id, {note: editNote.trim() || undefined}))}
+                            && void guard(() => onUpdate(editing.id, {note: editNote.trim()}))}
                         data-testid="edit-note-input"
                     />
+                    {/* 空串=清空备注(后端空串照存,null 才是"保持不变") */}
                     <button
                         disabled={busy}
                         data-testid="save-note"
-                        onClick={() => void guard(() => onUpdate(editing.id, {note: editNote.trim() || undefined}))}
+                        onClick={() => void guard(() => onUpdate(editing.id, {note: editNote.trim()}))}
                     >
                         存备注
                     </button>
@@ -137,6 +118,30 @@ export function HighlightBar({
                 </>
             )}
         </div>
+    )
+}
+
+/** 颜色选择圆点(创建/编辑共用形态)。 */
+function Swatches({selected, onSelect, testPrefix}: {
+    selected: string
+    onSelect: (color: string) => void
+    testPrefix: string
+}) {
+    return (
+        <span className="swatches" role="radiogroup" aria-label="划线颜色">
+            {HIGHLIGHT_COLORS.map(c => (
+                <button
+                    key={c.id}
+                    role="radio"
+                    aria-checked={selected === c.id}
+                    className={`swatch ${selected === c.id ? 'active' : ''}`}
+                    style={{background: c.hex}}
+                    title={c.label}
+                    data-testid={`${testPrefix}-${c.id}`}
+                    onClick={() => onSelect(c.id)}
+                />
+            ))}
+        </span>
     )
 }
 
