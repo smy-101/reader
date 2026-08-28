@@ -4,11 +4,11 @@
 
 **Blocked by:** 01(后端骨架 tracer:Spring Boot + 鉴权 + Flyway + Testcontainers)
 
-**Status:** ready-for-agent
+**Status:** done (2026-08-28)
 
-- [ ] 上传正常 EPUB 返回 200,响应含完整元数据(标题、作者、语言、章节概览、file_hash 等),前端可直接展示导入结果
-- [ ] chapter 仅收录"有正文的内容文件"并按阅读顺序 seq 平铺;嵌套目录不入库(D-40)
-- [ ] chapter.content 按清洗口径入库:丢图、表格拍平为文本、脚注并入章末、代码块原样保留(D-40);细则经 spike 定稿并落档
-- [ ] 书源文件与封面落盘到 gitignore 的服务器目录,后续各端可按需下载、列表可显示封面
-- [ ] 解析走同步路径,无异步任务(D-41)
-- [ ] 集成测试(正常 EPUB fixture):断言响应、book/chapter 行、磁盘文件三者齐备
+- [x] 上传正常 EPUB 返回 200,响应含完整元数据(标题、作者、语言、章节概览、file_hash 等),前端可直接展示导入结果
+- [x] chapter 仅收录"有正文的内容文件"并按阅读顺序 seq 平铺;嵌套目录不入库(D-40)
+- [x] chapter.content 按清洗口径入库:丢图、表格拍平为文本、脚注并入章末、代码块原样保留(D-40);细则经 spike 定稿并落档
+- [x] 书源文件与封面落盘到 gitignore 的服务器目录,后续各端可按需下载、列表可显示封面
+- [x] 解析走同步路径,无异步任务(D-41)
+- [x] 集成测试(正常 EPUB fixture):断言响应、book/chapter 行、磁盘文件三者齐备

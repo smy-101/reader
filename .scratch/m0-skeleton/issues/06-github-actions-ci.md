@@ -4,9 +4,9 @@
 
 **Blocked by:** 01(后端骨架 tracer:Spring Boot + 鉴权 + Flyway + Testcontainers)
 
-**Status:** ready-for-agent
+**Status:** done (2026-08-28)
 
-- [ ] GitHub 远程仓库建立,本地分支推送成功
-- [ ] workflow 仅跑 backend `mvn test`,无部署环节(D-23)
-- [ ] 验证过一次红→绿(故意引入失败或以等价方式证明拦截有效),结果记录在案
-- [ ] CI 与本地 `mvn test` 结果一致(Testcontainers 在 runner 上可跑)
+- [x] GitHub 远程仓库建立,本地分支推送成功
+- [x] workflow 仅跑 backend `mvn test`,无部署环节(D-23)
+- [x] 验证过一次红→绿(故意引入失败或以等价方式证明拦截有效),结果记录在案
+- [x] CI 与本地 `mvn test` 结果一致(Testcontainers 在 runner 上可跑)
