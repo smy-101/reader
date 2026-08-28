@@ -39,7 +39,7 @@ public abstract class IntegrationTestBase {
             .withUsername("test")
             .withPassword("test");
 
-    private static final Path STORAGE_ROOT;
+    protected static final Path STORAGE_ROOT;
 
     static {
         POSTGRES.start();
