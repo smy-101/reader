@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: reader-backend
+  datasource:
+    # 本地开发:从 local/db.env(不入库)导出 READER_DB_URL / READER_DB_USER / READER_DB_PASSWORD,见 backend/README.md
+    url: ${READER_DB_URL:jdbc:postgresql://localhost:5432/reader_dev}
+    username: ${READER_DB_USER:reader_app}
+    password: ${READER_DB_PASSWORD:}
+  flyway:
+    locations: classpath:db/migration
+  servlet:
+    multipart:
+      # FR-105:上传上限 100MB,超限 413
+      max-file-size: 100MB
+      max-request-size: 105MB
+
+server:
+  port: ${READER_SERVER_PORT:8080}
+  tomcat:
+    # 拒绝超大上传后吞掉剩余请求体,保证客户端能收到 413 响应而不是连接被重置
+    max-swallow-size: -1
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
+reader:
+  auth:
+    # 静态 Bearer token(D-4);生产用环境变量注入,默认值仅供本地开发
+    token: ${READER_AUTH_TOKEN:reader-dev-token}
+  storage:
+    # 书源文件与封面落盘根目录(需求文档 .gitignore 口径:目录不入库)
+    root: ${READER_DATA_DIR:./data}

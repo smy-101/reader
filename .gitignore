@@ -1,0 +1,10 @@
+# 本机敏感配置(数据库凭据等),永不入库
+local/
+# Java
+backend/target/
+*.class
+# Node
+node_modules/
+dist/
+# 书源文件与封面(服务器目录口径,D-20)
+data/

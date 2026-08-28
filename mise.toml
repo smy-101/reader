@@ -1,0 +1,8 @@
+# 项目工具链统一由 mise 管理(本地与 CI 一致)
+# - java:temurin-21 = Eclipse Temurin JDK 21 LTS(D-9:后端 JDK 21 LTS)
+# - maven:后端构建工具(D-9)
+# - node:前端 apps/*(apps 落地后使用,与全局版本一致)
+[tools]
+java = "temurin-21"
+maven = "3.9"
+node = "24.19.0"
