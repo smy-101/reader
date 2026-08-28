@@ -68,6 +68,12 @@ public class BookService {
         return fileStorage.read(book.getCoverPath());
     }
 
+    /** 书源文件内容(M1-04);书不存在抛 NoSuchElementException(→ 404)。 */
+    public byte[] readBookFile(long bookId) throws IOException {
+        Book book = requireBook(bookId);
+        return fileStorage.readBookFile(book.getFileHash());
+    }
+
     /** 封面扩展名(决定响应 Content-Type);无封面返回 null。 */
     public String coverExtension(long bookId) {
         Book book = requireBook(bookId);

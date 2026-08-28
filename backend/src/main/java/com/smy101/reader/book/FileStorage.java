@@ -30,6 +30,11 @@ public class FileStorage {
         return write(BOOKS_DIR + "/" + fileHash + ".epub", bytes);
     }
 
+    /** 按 file_hash 读取书源文件(M1-04 下载端点;books/<hash>.epub)。 */
+    public byte[] readBookFile(String fileHash) throws IOException {
+        return read(BOOKS_DIR + "/" + fileHash + ".epub");
+    }
+
     /** 保存封面,返回相对 root 的路径(covers/<hash>.<ext>)。 */
     public String saveCover(String fileHash, byte[] bytes, String extension) throws IOException {
         return write(COVERS_DIR + "/" + fileHash + "." + extension, bytes);

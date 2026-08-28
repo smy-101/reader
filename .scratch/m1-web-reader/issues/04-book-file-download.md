@@ -4,9 +4,9 @@
 
 **Blocked by:** None(可立即开始)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] 按书 id 可下载书源文件,内容与上传时落盘的原文件一致
-- [ ] 书不存在 → 404 可读文案;无/错 token → 401,与其他接口行为一致
-- [ ] token 仅经请求头传递,不进 URL 参数
-- [ ] Seam A 集成测试覆盖上述行为,`mvn test` 全绿
+- [x] 按书 id 可下载书源文件,内容与上传时落盘的原文件一致
+- [x] 书不存在 → 404 可读文案;无/错 token → 401,与其他接口行为一致
+- [x] token 仅经请求头传递,不进 URL 参数
+- [x] Seam A 集成测试覆盖上述行为,`mvn test` 全绿

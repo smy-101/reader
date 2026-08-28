@@ -5,6 +5,8 @@ import com.smy101.reader.book.dto.BookListItem;
 import com.smy101.reader.book.dto.ChapterListItem;
 import com.smy101.reader.book.dto.UploadBookResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -71,6 +73,17 @@ public class BookController {
         String ext = bookService.coverExtension(id);
         return ResponseEntity.ok()
                 .contentType(COVER_MEDIA_TYPES.getOrDefault(ext, MediaType.APPLICATION_OCTET_STREAM))
+                .body(bytes);
+    }
+
+    /** 书源文件下载(M1-04):渲染引擎带 token 程序化拉取完整 EPUB。 */
+    @GetMapping("/{id}/file")
+    public ResponseEntity<byte[]> file(@PathVariable long id) throws IOException {
+        byte[] bytes = bookService.readBookFile(id);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/epub+zip"))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename("book-" + id + ".epub").build().toString())
                 .body(bytes);
     }
 }
