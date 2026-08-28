@@ -115,10 +115,17 @@ export function createClient({baseUrl = '', token}: ClientOptions) {
     })
 
     async function request<T>(path: string, init?: RequestInit): Promise<T> {
-        const res = await fetch(baseUrl + path, {
-            ...init,
-            headers: {...headers(), ...(init?.headers ?? {})},
-        })
+        let res: Response
+        try {
+            res = await fetch(baseUrl + path, {
+                ...init,
+                headers: {...headers(), ...(init?.headers ?? {})},
+            })
+        } catch {
+            // 网络层失败(后端不可达/DNS/断网):fetch 拖 TypeError,浏览器文案不可读;
+            // 同源与跨域(绝对 baseUrl)口径一致,统一换可读文案(US 9/14)
+            throw new ApiError(0, '无法连接到后端:请确认后端已启动,或在连接设置里检查后端地址')
+        }
         if (!res.ok) {
             throw new ApiError(res.status, await errorMessage(res))
         }

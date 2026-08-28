@@ -2,6 +2,7 @@ import {useCallback, useEffect, useMemo, useState} from 'react'
 import type {BookListItem} from '@reader/api-client'
 import {api} from '../client'
 import {BookCard} from '../components/BookCard'
+import {ConnectionSettings} from '../components/ConnectionSettings'
 import {UploadPanel, type UploadResult} from '../components/UploadPanel'
 
 /** 书库页(FR-103/106):封面、标题、作者、进度;标题/作者即时过滤;单/批量上传。 */
@@ -10,6 +11,7 @@ export function Library({onOpen}: { onOpen: (bookId: number) => void }) {
     const [loadError, setLoadError] = useState<string | null>(null)
     const [loading, setLoading] = useState(true)
     const [filter, setFilter] = useState('')
+    const [settingsOpen, setSettingsOpen] = useState(false)
 
     const refresh = useCallback(async () => {
         setLoading(true)
@@ -44,7 +46,16 @@ export function Library({onOpen}: { onOpen: (bookId: number) => void }) {
         <main className="library">
             <header className="library-header">
                 <h1>书库</h1>
-                <UploadPanel onDone={handleUploaded} onOpenBook={onOpen}/>
+                <div className="header-actions">
+                    <UploadPanel onDone={handleUploaded} onOpenBook={onOpen}/>
+                    <button
+                        className="link-button"
+                        onClick={() => setSettingsOpen(true)}
+                        data-testid="connection-settings-open"
+                    >
+                        连接设置
+                    </button>
+                </div>
             </header>
 
             <input
@@ -57,7 +68,15 @@ export function Library({onOpen}: { onOpen: (bookId: number) => void }) {
                 data-testid="filter-input"
             />
 
-            {loadError && <p className="error" role="alert">{loadError}</p>}
+            {loadError && (
+                <div className="load-error" role="alert">
+                    <p className="error">{loadError}</p>
+                    <button className="link-button" onClick={() => setSettingsOpen(true)}
+                            data-testid="error-settings-open">
+                        打开连接设置
+                    </button>
+                </div>
+            )}
             {loading && books.length === 0 && <p className="hint">加载书库中…</p>}
             {!loading && books.length === 0 && !loadError && (
                 <p className="hint" data-testid="empty-library">书库还是空的,上传第一本 EPUB 吧</p>
@@ -71,6 +90,8 @@ export function Library({onOpen}: { onOpen: (bookId: number) => void }) {
             {!loading && books.length > 0 && filtered.length === 0 && (
                 <p className="hint" data-testid="no-match">没有匹配“{filter}”的书</p>
             )}
+
+            {settingsOpen && <ConnectionSettings onClose={() => setSettingsOpen(false)}/>}
         </main>
     )
 }

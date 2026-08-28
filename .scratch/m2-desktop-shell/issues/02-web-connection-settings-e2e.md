@@ -4,11 +4,11 @@
 
 **Blocked by:** 01(跨域绝对 URL 的 E2E 依赖后端 CORS 放行)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] 连接设置 UI:后端 URL + token 可填写、保存后 localStorage 持久化、重载页面仍在
-- [ ] 测试连接:正确配置 → ok;错 token → 401 可读文案;不可达 URL → 可读错误提示,设置页不崩
-- [ ] 已配置时一切 API 走绝对 baseUrl + 运行时 token;未配置时回退现状,既有 E2E 用例零改动全绿
-- [ ] 书库拉取失败时 UI 显示可读错误并提供连接设置入口(首次体验被引导而非白屏)
-- [ ] E2E"桌面等效连接"用例:经 UI 配置绝对 URL + 正确 token → 列表→打开→划线/进度链路走通且落库(经后端可验证)
-- [ ] token 不进 URL、不进日志,维持仅经 Authorization 头(D-4 口径)
+- [x] 连接设置 UI:后端 URL + token 可填写、保存后 localStorage 持久化、重载页面仍在
+- [x] 测试连接:正确配置 → ok;错 token → 401 可读文案;不可达 URL → 可读错误提示,设置页不崩
+- [x] 已配置时一切 API 走绝对 baseUrl + 运行时 token;未配置时回退现状,既有 E2E 用例零改动全绿
+- [x] 书库拉取失败时 UI 显示可读错误并提供连接设置入口(首次体验被引导而非白屏)
+- [x] E2E"桌面等效连接"用例:经 UI 配置绝对 URL + 正确 token → 列表→打开→划线/进度链路走通且落库(经后端可验证)
+- [x] token 不进 URL、不进日志,维持仅经 Authorization 头(D-4 口径)
