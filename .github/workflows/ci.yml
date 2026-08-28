@@ -73,6 +73,10 @@ jobs:
     # ADR-0006:触发取 push 到 main + 手动,PR 不打包(workflow 级 on.pull_request 对全部 job 生效,这里显式跳过)
     if: github.event_name != 'pull_request'
     runs-on: windows-latest
+    defaults:
+      run:
+        # windows runner 自带 Git bash;与本地/另两个 job 的 bash 语义完全一致,规避 pwsh 传参差异
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
@@ -95,7 +99,11 @@ jobs:
         run: npm ci
 
       - name: Build web(不注入构建期 token,桌面端 token 一律经连接设置运行时配置,不进壳二进制)
-        run: npm run build -w apps/web
+        working-directory: apps/web
+        run: |
+          npm run build
+          # 守卫:构建产物缺失就在此步大声失败(与 tauri 的 frontendDist 报错区分开)
+          node -e "const fs=require('fs');if(!fs.existsSync('dist/index.html')){console.error('MISSING: apps/web/dist/index.html');process.exit(1)};console.log('OK: dist/index.html present')"
         env:
           VITE_READER_TOKEN: ""
 
