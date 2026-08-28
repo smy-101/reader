@@ -1,5 +1,4 @@
-# CI(D-23):仅跑后端测试(Testcontainers 需要 Docker,GitHub runner 自带);无 CD。
-# apps/* 各自落地后再加 job。
+# CI(D-23):backend job 跑集成测试;web job 跑全栈 E2E(Playwright × 真实后端 × Docker PG);无 CD。
 name: ci
 
 on:
@@ -23,3 +22,44 @@ jobs:
       - name: Backend tests (mvn test)
         working-directory: backend
         run: mvn --batch-mode test
+
+  # M1-03:apps/web 全栈 E2E(Seam B)。编排见 apps/web/e2e/global-setup.ts:
+  # global-setup 内 mvn package 打后端 jar,起 pgvector/pgvector:pg18 容器与真实后端进程;
+  # Playwright webServer 起 Vite 代理 /api。Docker 为 GitHub runner 自带。
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 24(与 mise 本地一致)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Set up JDK 21(后端打包用)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright chromium(含系统依赖)
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E (Playwright 全栈)
+        working-directory: apps/web
+        run: npx playwright test
+
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7

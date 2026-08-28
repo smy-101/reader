@@ -4,11 +4,11 @@
 
 **Blocked by:** 02(apps/web + api-client)
 
-**Status:** ready-for-agent
+**Status:** done(本地 3 用例绿;CI web job 待 push 验证)
 
-- [ ] E2E harness 一键拉起:真实后端进程 + Testcontainers PG + apps/web,Playwright 驱动真实浏览器
-- [ ] E2E 用例:上传单本 → 书库列表出现(封面、标题可见)
-- [ ] E2E 用例:批量上传 → 全部出现;重复上传 → "已在书库"提示
-- [ ] E2E 用例:按标题过滤生效
-- [ ] 多章带目录的 E2E fixture EPUB 入库,供 05/07/08 复用
-- [ ] GitHub Actions 新增 apps/web job,E2E 全绿;backend job 不受影响
+- [x] E2E harness 一键拉起:真实后端进程 + Testcontainers PG + apps/web,Playwright 驱动真实浏览器
+- [x] E2E 用例:上传单本 → 书库列表出现(封面、标题可见)
+- [x] E2E 用例:批量上传 → 全部出现;重复上传 → "已在书库"提示
+- [x] E2E 用例:按标题过滤生效
+- [x] 多章带目录的 E2E fixture EPUB 入库,供 05/07/08 复用
+- [x] GitHub Actions 新增 apps/web job,E2E 全绿;backend job 不受影响

@@ -8,3 +8,7 @@ node_modules/
 dist/
 # 书源文件与封面(服务器目录口径,D-20)
 data/
+# E2E 产物与本地数据
+apps/web/e2e/.data/
+apps/web/test-results/
+apps/web/playwright-report/
