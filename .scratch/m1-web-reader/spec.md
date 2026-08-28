@@ -1,6 +1,6 @@
 # Spec: M1 网页阅读器 —— apps/web 阅读、进度、划线 + 同步 API
 
-Status: done(8/8 issue 交付;CI push 后验证)
+Status: done(8/8 issue 交付;CI backend + web 双 job 绿 ✅ 2026-08-28)
 Created: 2026-08-28
 Source: `docs/需求文档.md` v1.3(M1 章节、FR-103/106/201/202/203、D-18/19/24/30/40/43/44)+ `CONTEXT.md` 术语表 + M0 落地现状
 Milestone: M1(网页阅读器)
