@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.smy101.reader",
   "build": {
-    "frontendDist": "../web/dist"
+    "frontendDist": "../../web/dist"
   },
   "app": {
     "windows": [

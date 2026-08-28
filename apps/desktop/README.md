@@ -5,7 +5,11 @@
 
 ## 结构
 
-- `src-tauri/tauri.conf.json`:`frontendDist: "../web/dist"`(相对 src-tauri)、窗口、NSIS 打包
+- **frontendDist 路径口径**:配置值为 `../../web/dist`——CLI 从 apps/desktop 发起时按
+  `cwd + src-tauri/../../web/dist` 解析,恰为 apps/web/dist;若按配置文件目录(官方口径)解析
+  同样得 apps/web/dist。两级 `../` 在两种解析基下都正确,一级会错指 apps/desktop/web/dist。
+
+- `src-tauri/tauri.conf.json`:`frontendDist: "../../web/dist"`(见下方路径口径)、窗口、NSIS 打包
 - `src-tauri/src/` 默认模板(main.rs + lib.rs,无任何 command);`capabilities/` 不授权任何权限
 - `src-tauri/icons/` 脚本生成的极简图标(蓝底白书)
 
