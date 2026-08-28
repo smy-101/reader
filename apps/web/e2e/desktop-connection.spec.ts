@@ -12,25 +12,23 @@ import {dragSelectFirstParagraph, renderedText, uploadFiles, waitForRendered} fr
 const BACKEND = `http://localhost:${e2e.BACKEND_PORT}`
 const TOKEN = e2e.TOKEN
 
+/** 带token直连绝对后端的 GET(跨域,即壳内路径);非 2xx 返回 null。 */
+async function apiGet<T>(page: import('@playwright/test').Page, path: string): Promise<T | null> {
+    return page.evaluate(async ({url, token, path}) => {
+        const res = await fetch(`${url}${path}`, {headers: {Authorization: `Bearer ${token}`}})
+        if (!res.ok) return null
+        return await res.json() as T
+    }, {url: BACKEND, token: TOKEN, path})
+}
+
 /** 服务端划线数:直连绝对后端(跨域 GET,带 token)——与壳内同一路径。 */
-function serverHighlights(page: import('@playwright/test').Page, bookId = 1): Promise<number> {
-    return page.evaluate(async ({url, bookId, token}) => {
-        const res = await fetch(`${url}/api/books/${bookId}/highlights`, {
-            headers: {Authorization: `Bearer ${token}`},
-        })
-        return ((await res.json()) as unknown[]).length
-    }, {url: BACKEND, bookId, token: TOKEN})
+async function serverHighlights(page: import('@playwright/test').Page, bookId = 1): Promise<number> {
+    return (await apiGet<unknown[]>(page, `/api/books/${bookId}/highlights`))?.length ?? 0
 }
 
 /** 服务端进度:直连绝对后端;未上报返回 null。 */
 function serverProgressAbsolute(page: import('@playwright/test').Page, bookId = 1): Promise<{ percent: number } | null> {
-    return page.evaluate(async ({url, bookId, token}) => {
-        const res = await fetch(`${url}/api/books/${bookId}/progress`, {
-            headers: {Authorization: `Bearer ${token}`},
-        })
-        if (!res.ok) return null
-        return {percent: (await res.json()).percent}
-    }, {url: BACKEND, bookId, token: TOKEN})
+    return apiGet<{ percent: number }>(page, `/api/books/${bookId}/progress`)
 }
 
 test.beforeEach(async () => {

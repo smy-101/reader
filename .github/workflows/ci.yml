@@ -70,6 +70,8 @@ jobs:
   # 与 backend/web job 互不干扰(Playwright E2E 留在 ubuntu)。
   # 本机零 Rust/MSVC 工具链(D-22 桌面版):WSL 无法原生产出 Windows 安装包。
   desktop-package:
+    # ADR-0006:触发取 push 到 main + 手动,PR 不打包(workflow 级 on.pull_request 对全部 job 生效,这里显式跳过)
+    if: github.event_name != 'pull_request'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

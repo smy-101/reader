@@ -13,6 +13,8 @@ npm run typecheck -w @reader/web
 
 - token:环境变量 `VITE_READER_TOKEN`(默认 `reader-dev-token`,与后端开发默认一致);
   由 api-client 统一经 Authorization 头携带,绝不进 URL。
+- 连接设置(M2):应用内可配后端绝对地址 + token(localStorage 持久化,含测试连接);
+  已配置时优先于上述构建期注入,未配置时完全回退同源默认——桌面壳即此形态(ADR-0006)。
 
 ## E2E(全栈:真实浏览器 × 真实后端 × Docker PG)
 
@@ -38,7 +40,8 @@ npx playwright test
 
 ## 目录约定
 
-- `src/pages` 页面(书库/阅读器);`src/components` 组件;`src/client.ts` client 单例 + 设备标识
+- `src/pages` 页面(书库/阅读器);`src/components` 组件;`src/client.ts` client 单例 + 设备标识;
+  `src/connection.ts` 连接设置存取(localStorage)
 - `e2e/` Playwright(spec、global-setup、fixtures)
 - `vendor/foliate-js/` 渲染引擎(裁剪口径见其 VENDORED.md)
 - `spike/` M1-01 spike 页(结论见 `.scratch/m1-web-reader/spike-conclusion.md`)
