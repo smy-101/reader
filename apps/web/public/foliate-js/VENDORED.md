@@ -2,7 +2,10 @@
 
 - 上游:https://github.com/johnfactotum/foliate-js
 - 版本:commit `78914aef4466eb960965702401634c2cb348e9b1`(2026-05-01,main 浅克隆)
-- 引入方式:源码 vendor 入库(ADR-0004 / D-18;无 npm 包,升级 = 手动替换本目录并回归)
+- 引入方式:源码 vendor 入库(ADR-0004 / D-18;无 npm 包,升级 = 手动替换本目录并回归)。
+  位置:`apps/web/public/foliate-js/`——以原生 ESM 静态资源发布:
+  view.js 内对非 EPUB 格式的按需动态 import(mobi/pdf/cbz…)在本项目永不触发,
+  走静态资源可避免打包器静态解析这些不存在的模块(见 spike 结论坑位)。
 - 裁剪口径:仅保留 EPUB 渲染闭包(view/epub/epubcfi/paginator/fixed-layout/overlayer/progress/
   text-walker/search/tts + vendor/zip.js、vendor/fflate.js)。
   排除:pdfjs(13MB,PDF 不在本项目范围)、mobi/fb2/cbz/pdf/dict/opds 等非 EPUB 格式模块、

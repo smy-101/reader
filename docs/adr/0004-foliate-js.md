@@ -1,6 +1,6 @@
 # ADR-0004: EPUB 渲染引擎选 foliate-js(源码 vendor 入库)
 
-- 状态:已接受(2026-02,盘问 R5-Q16);spike 已通过(2026-08-28,结论见 `.scratch/m1-web-reader/spike-conclusion.md`,vendor 入库 `apps/web/vendor/foliate-js/`)
+- 状态:已接受(2026-02,盘问 R5-Q16);spike 已通过(2026-08-28,结论见 `.scratch/m1-web-reader/spike-conclusion.md`,vendor 入库 `apps/web/public/foliate-js/`)
 - 关联决策:D-18(需求文档 §6.1);关联风险:R-6
 
 ## 背景
@@ -9,7 +9,7 @@
 
 ## 决策
 
-选 **foliate-js**,以**源码 vendor 进仓库**的方式引入(`apps/web/vendor/foliate-js/`);并以 48h spike 为 M1 硬前置——spike 只验两个硬点:**渲染** 与 **选中取 CFI**,不通过则退 epub.js(D-18)。
+选 **foliate-js**,以**源码 vendor 进仓库**的方式引入(`apps/web/public/foliate-js/`);并以 48h spike 为 M1 硬前置——spike 只验两个硬点:**渲染** 与 **选中取 CFI**,不通过则退 epub.js(D-18)。
 
 ## 理由
 

@@ -1,8 +1,8 @@
 // M1-01 spike 逻辑:验证 (a) 渲染+翻页/滚动 (b) 选中取 CFI + 按 CFI 还原位置;
 // 附带观察:嵌套目录解析、字号/主题可调性、高亮绘制(为 07 划线铺路)。
-import '../vendor/foliate-js/view.js'
-import { makeBook } from '../vendor/foliate-js/view.js'
-import { Overlayer } from '../vendor/foliate-js/overlayer.js'
+import '/foliate-js/view.js'
+import { makeBook } from '/foliate-js/view.js'
+import { Overlayer } from '/foliate-js/overlayer.js'
 
 const $ = id => document.getElementById(id)
 const view = $('view')

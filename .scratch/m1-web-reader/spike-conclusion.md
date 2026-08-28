@@ -1,6 +1,6 @@
 # foliate-js spike 结论(M1-01)
 
-- 结论:**过**(两个硬点均验证通过,引擎定案 foliate-js,vendor 源码已入库 `apps/web/vendor/foliate-js/`)
+- 结论:**过**(两个硬点均验证通过,引擎定案 foliate-js,vendor 源码已入库 `apps/web/public/foliate-js/`)
 - 上游版本:commit `78914aef4466eb960965702401634c2cb348e9b1`(裁剪口径见 vendor 目录 VENDORED.md)
 - 验证环境:WSL 静态服务 + Windows Chrome(chrome-devtools MCP 驱动,与 Playwright 同为 CDP 通道)
 - 验证日期:2026-08-28(时间盒内完成,远低于 48h 上限)

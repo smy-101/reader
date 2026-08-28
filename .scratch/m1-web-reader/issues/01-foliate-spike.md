@@ -9,5 +9,5 @@
 - [x] 裸 spike 页能打开一本多章 EPUB 并渲染正文(硬点 a)
 - [x] 选中文字能取出可持久化的 CFI,刷新后按 CFI 能还原位置(硬点 b)
 - [x] spike 结论落档:过/不过、关键坑位与解法清单(目录解析、字号/主题可调性)
-- [x] 引擎定案:foliate-js 通过并以 vendor 源码正式入库(apps/web/vendor/foliate-js/)
+- [x] 引擎定案:foliate-js 通过并以 vendor 源码正式入库(apps/web/public/foliate-js/)
 - [x] “选中手势能否被 Playwright 稳定驱动”结论:能(CDP 拖拽一次成功);备选:程序化 addRange
