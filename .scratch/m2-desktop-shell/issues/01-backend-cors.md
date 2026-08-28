@@ -4,11 +4,11 @@
 
 **Blocked by:** None(可立即开始)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] OPTIONS preflight(带 Origin、Access-Control-Request-Method/Headers)→ 2xx 且 Access-Control-Allow-Origin / -Allow-Headers / -Allow-Methods 正确
-- [ ] preflight 不带 token 也不被 401 拦截(preflight 不携带凭据是浏览器语义)
-- [ ] 带 Origin + token 的实际请求:响应携带 Access-Control-Allow-Origin,业务行为与同源请求一致(含错误文案)
-- [ ] 跨域不带 token → 401 不变(CORS 放行 ≠ 鉴权放行)
-- [ ] 不放行 credentials(无 Access-Control-Allow-Credentials)
-- [ ] 既有全部集成测试零回归,mvn test 绿
+- [x] OPTIONS preflight(带 Origin、Access-Control-Request-Method/Headers)→ 2xx 且 Access-Control-Allow-Origin / -Allow-Headers / -Allow-Methods 正确
+- [x] preflight 不带 token 也不被 401 拦截(preflight 不携带凭据是浏览器语义)
+- [x] 带 Origin + token 的实际请求:响应携带 Access-Control-Allow-Origin,业务行为与同源请求一致(含错误文案)
+- [x] 跨域不带 token → 401 不变(CORS 放行 ≠ 鉴权放行)
+- [x] 不放行 credentials(无 Access-Control-Allow-Credentials)
+- [x] 既有全部集成测试零回归,mvn test 绿
