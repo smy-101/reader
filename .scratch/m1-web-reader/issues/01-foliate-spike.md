@@ -4,10 +4,10 @@
 
 **Blocked by:** None(可立即开始)
 
-**Status:** ready-for-agent
+**Status:** done(结论:.scratch/m1-web-reader/spike-conclusion.md —— 过;vendor 已入库;手势可全自动驱动)
 
-- [ ] 裸 spike 页能打开一本多章 EPUB 并渲染正文(硬点 a)
-- [ ] 选中文字能取出可持久化的 CFI,刷新后按 CFI 能还原位置(硬点 b)
-- [ ] spike 结论落档:过/不过、关键坑位与解法清单(目录解析、字号/主题可调性)
-- [ ] 引擎定案:foliate-js 通过则以 vendor 源码正式入库;不过则退 epub.js 并修订 ADR-0004
-- [ ] 给出"选中手势能否被 Playwright 稳定驱动"的结论;不可行时给出程序化划线的替代路径
+- [x] 裸 spike 页能打开一本多章 EPUB 并渲染正文(硬点 a)
+- [x] 选中文字能取出可持久化的 CFI,刷新后按 CFI 能还原位置(硬点 b)
+- [x] spike 结论落档:过/不过、关键坑位与解法清单(目录解析、字号/主题可调性)
+- [x] 引擎定案:foliate-js 通过并以 vendor 源码正式入库(apps/web/vendor/foliate-js/)
+- [x] “选中手势能否被 Playwright 稳定驱动”结论:能(CDP 拖拽一次成功);备选:程序化 addRange

@@ -1,0 +1,64 @@
+<!doctype html>
+<!-- M1-01 spike 页:裸页验证 foliate-js 两硬点(渲染 / 选中取 CFI),无构建步骤。
+     用法:python3 -m http.server 8099(apps/web 目录)→ http://localhost:8099/spike/?book=fixtures/normal.epub -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>foliate-js spike</title>
+<style>
+    :root { color-scheme: light dark; }
+    html, body { height: 100%; margin: 0; }
+    body { font: 14px/1.5 system-ui, sans-serif; display: flex; flex-direction: column; }
+    header { display: flex; gap: 8px; align-items: center; padding: 6px 10px;
+             border-bottom: 1px solid #8884; flex-wrap: wrap; }
+    header .grow { flex: 1; }
+    #layout { display: flex; flex: 1; min-height: 0; }
+    #toc { width: 260px; overflow: auto; padding: 8px; border-right: 1px solid #8884; }
+    #toc ul { margin: 0; padding-left: 14px; list-style: none; }
+    #toc a { cursor: pointer; color: inherit; text-decoration: underline dotted; }
+    foliate-view { flex: 1; height: 100%; }
+    footer { border-top: 1px solid #8884; padding: 4px 10px; display: flex; gap: 16px; flex-wrap: wrap; }
+    footer code { background: #8883; padding: 0 4px; border-radius: 3px; word-break: break-all; }
+    button { cursor: pointer; }
+    /* 主题仅作用于宿主页与 iframe 内容(内容文字色经 setStyles 注入) */
+    body[data-theme=dark]  { background: #202020; color: #ddd; }
+    body[data-theme=sepia] { background: #f4ecd8; color: #5b4636; }
+</style>
+</head>
+<body>
+<header>
+    <label>打开 EPUB <input type="file" id="file" accept=".epub,application/epub+zip"></label>
+    <button id="prev">← 上一页</button>
+    <button id="next">下一页 →</button>
+    <label>翻页方式
+        <select id="flow">
+            <option value="paginated">分页</option>
+            <option value="scrolled">滚动</option>
+        </select>
+    </label>
+    <label>字号 <button id="font-minus">A-</button><button id="font-plus">A+</button>
+        <span id="font-size-label"></span></label>
+    <label>主题
+        <select id="theme">
+            <option value="light">亮</option>
+            <option value="sepia">纸黄</option>
+            <option value="dark">暗</option>
+        </select>
+    </label>
+    <span class="grow"></span>
+    <button id="restore">回到已存位置</button>
+</header>
+<div id="layout">
+    <nav id="toc"><em>目录将出现在这里</em></nav>
+    <foliate-view id="view"></foliate-view>
+</div>
+<footer>
+    <span>relocate CFI:<code id="cfi">-</code></span>
+    <span>进度:<span id="percent">-</span></span>
+    <span>位置:<span id="section">-</span></span>
+    <span>选中 CFI:<code id="sel-cfi">-</code></span>
+    <button id="highlight" disabled>把选中文字画成高亮</button>
+</footer>
+<script type="module" src="spike.js"></script>
+</body>
+</html>
