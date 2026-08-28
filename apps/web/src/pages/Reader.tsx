@@ -1,25 +1,28 @@
 import {useCallback, useEffect, useState} from 'react'
-import type {BookListItem} from '@reader/api-client'
+import type {BookListItem, Highlight} from '@reader/api-client'
 import {api} from '../client'
 import {FoliateViewHost} from '../reader/FoliateViewHost'
 import type {FoliateView, RelocateDetail, TocItem} from '../reader/foliate-types'
 import {loadSettings, saveSettings, THEME_COLORS, type ReaderSettings} from '../reader/settings'
 import {FOLIATE_VIEW_URL, loadFoliateModule} from '../reader/foliate-urls'
+import {useHighlights} from '../reader/useHighlights'
+import {HighlightBar, HighlightListPanel} from '../components/Highlights'
 
 /**
- * 阅读器(M1-05):书源文件经 api-client 带 token 拉取 → foliate-js 渲染;
- * 目录从 EPUB 原文件解析嵌套结构(D-40 不入库);字号/主题/翻页方式仅存 localStorage(FR-201)。
- * M1-07/08 在此之上接划线与进度。
+ * 阅读器(M1-05/07/08):渲染、目录、本地设置;选中划线(颜色/备注/删除)、全量拉取;进度接续与上报。
  */
 export function Reader({bookId, onExit}: { bookId: number; onExit: () => void }) {
     const [meta, setMeta] = useState<BookListItem | null>(null)
-    const [status, setStatus] = useState<'loading' | 'ready' | ('error' & string) | 'error'>('loading')
+    const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
     const [error, setError] = useState<string | null>(null)
     const [toc, setToc] = useState<TocItem[]>([])
     const [tocOpen, setTocOpen] = useState(false)
+    const [highlightsOpen, setHighlightsOpen] = useState(false)
     const [settings, setSettings] = useState<ReaderSettings>(() => loadSettings())
     const [progressLabel, setProgressLabel] = useState<string>('')
     const [view, setView] = useState<FoliateView | null>(null)
+
+    const hl = useHighlights(view, bookId, status === 'ready')
 
     // 打开书:详情(标题)+ 书源文件 → makeBook → view.open
     const openBook = useCallback(async (v: FoliateView) => {
@@ -71,6 +74,9 @@ export function Reader({bookId, onExit}: { bookId: number; onExit: () => void })
                 <h1 className="reader-title">{meta?.title ?? '阅读器'}</h1>
                 <span className="reader-progress" data-testid="reader-progress-label">{progressLabel}</span>
                 <button onClick={() => setTocOpen(o => !o)} data-testid="toc-toggle">目录</button>
+                <button onClick={() => setHighlightsOpen(o => !o)} data-testid="highlights-toggle">
+                    划线({hl.highlights.length})
+                </button>
                 <label className="setting">
                     字号
                     <button
@@ -116,12 +122,34 @@ export function Reader({bookId, onExit}: { bookId: number; onExit: () => void })
                         }}/>
                     </nav>
                 )}
+                {highlightsOpen && (
+                    <HighlightListPanel
+                        highlights={hl.highlights}
+                        onJump={h => {
+                            void view?.goTo(h.cfi)
+                        }}
+                        onEdit={h => hl.setEditing(h)}
+                    />
+                )}
                 <div className="reader-main">
                     {status === 'loading' && <p className="hint">打开书籍中…</p>}
                     {status === 'error' && <p className="error" role="alert">打开失败:{error}</p>}
                     <FoliateViewHost onReady={v => void openBook(v)}/>
                 </div>
             </div>
+
+            <HighlightBar
+                selection={hl.selection}
+                editing={hl.editing}
+                onCreate={hl.create}
+                onUpdate={hl.update}
+                onDelete={hl.remove}
+                onJump={(h: Highlight) => void view?.goTo(h.cfi)}
+                onClose={() => {
+                    hl.setSelection(null)
+                    hl.setEditing(null)
+                }}
+            />
         </main>
     )
 }
