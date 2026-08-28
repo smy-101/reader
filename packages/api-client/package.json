@@ -1,0 +1,10 @@
+{
+  "name": "@reader/api-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "共享 TS 类型与 API client:token 经配置注入,请求统一带 Bearer(M1 spec;前端与后端契约单一出处,后续桌面/安卓壳复用)",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

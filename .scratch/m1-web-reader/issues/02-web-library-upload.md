@@ -4,11 +4,11 @@
 
 **Blocked by:** None(可立即开始;与 01 spike 互不阻塞)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] apps/web(React+TS)应用可本地启动,经 api-client 带 token 调通后端,token 可配置
-- [ ] 书库列表:封面、标题、作者;按标题/作者即时过滤(FR-103/106)
-- [ ] 单本上传成功后立即出现在书库列表
-- [ ] 多选批量上传:循环逐本调单文件接口,逐本展示结果,重复/失败不打断整批(D-43)
-- [ ] 重复上传提示"已在书库";损坏/DRM/超限错误以可读文案透出(D-30 / M0 文案)
-- [ ] packages/api-client 类型与 client 就位、token 注入,后续票可在此扩展
+- [x] apps/web(React+TS)应用可本地启动,经 api-client 带 token 调通后端,token 可配置
+- [x] 书库列表:封面、标题、作者;按标题/作者即时过滤(FR-103/106)
+- [x] 单本上传成功后立即出现在书库列表
+- [x] 多选批量上传:循环逐本调单文件接口,逐本展示结果,重复/失败不打断整批(D-43)
+- [x] 重复上传提示"已在书库";损坏/DRM/超限错误以可读文案透出(D-30 / M0 文案)
+- [x] packages/api-client 类型与 client 就位、token 注入,后续票可在此扩展
