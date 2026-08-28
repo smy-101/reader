@@ -11,6 +11,7 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
 
 import java.util.Map;
+import java.util.NoSuchElementException;
 
 /**
  * 全局错误响应(User Story 14):一切错误以 {"error": 可读文案} 返回,不外漏堆栈。
@@ -35,6 +36,12 @@ public class ApiExceptionHandler {
     public ResponseEntity<Map<String, String>> tooLarge(Exception e) {
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
                 .body(Map.of("error", "文件超过 100MB 上限"));
+    }
+
+    @ExceptionHandler(NoSuchElementException.class)
+    public ResponseEntity<Map<String, String>> notFound(NoSuchElementException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", e.getMessage() == null ? "资源不存在" : e.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)

@@ -1,6 +1,8 @@
 package com.smy101.reader.book;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.smy101.reader.book.dto.BookDetail;
+import com.smy101.reader.book.dto.ChapterListItem;
 import com.smy101.reader.book.dto.UploadBookResponse;
 import com.smy101.reader.book.epub.EpubParser;
 import com.smy101.reader.book.epub.ParsedEpub;
@@ -13,9 +15,10 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.NoSuchElementException;
 
 /**
- * 书籍入库(术语见 CONTEXT.md:书籍/章节/书源文件/书库)。
+ * 书籍入库与查询(术语见 CONTEXT.md:书籍/章节/书源文件/书库)。
  * <p>
  * 上传流程(FR-101,D-29 先解析后落盘 / D-30 同 hash 幂等 / D-41 同步解析):
  * hash → 查重(命中即返回已存在书,不再解析落盘)→ 解析 → 文件落盘 → 事务内入库。
@@ -36,6 +39,45 @@ public class BookService {
         return bookMapper.selectList(null);
     }
 
+    /** 详情;不存在抛 NoSuchElementException(→ 404)。 */
+    public BookDetail detail(long id) {
+        Book book = requireBook(id);
+        Long count = chapterMapper.selectCount(
+                new LambdaQueryWrapper<Chapter>().eq(Chapter::getBookId, id));
+        return toDetail(book, count == null ? 0 : count.intValue());
+    }
+
+    public List<ChapterListItem> listChapters(long bookId) {
+        requireBook(bookId);
+        return chapterMapper.selectList(
+                        new LambdaQueryWrapper<Chapter>()
+                                .eq(Chapter::getBookId, bookId)
+                                .orderByAsc(Chapter::getSeq))
+                .stream()
+                .map(c -> new ChapterListItem(c.getId(), c.getSeq(), c.getTitle(), c.getHref(), c.getTextLength()))
+                .toList();
+    }
+
+    /** 封面文件内容;无封面或书不存在抛 NoSuchElementException(→ 404)。 */
+    public byte[] readCover(long bookId) throws IOException {
+        Book book = requireBook(bookId);
+        if (book.getCoverPath() == null || !fileStorage.exists(book.getCoverPath())) {
+            throw new NoSuchElementException("书籍无封面");
+        }
+        return fileStorage.read(book.getCoverPath());
+    }
+
+    /** 封面扩展名(决定响应 Content-Type);无封面返回 null。 */
+    public String coverExtension(long bookId) {
+        Book book = requireBook(bookId);
+        if (book.getCoverPath() == null) {
+            return null;
+        }
+        String path = book.getCoverPath();
+        int dot = path.lastIndexOf('.');
+        return dot < 0 ? null : path.substring(dot + 1);
+    }
+
     public UploadBookResponse upload(byte[] epubBytes) {
         String hash = sha256Hex(epubBytes);
 
@@ -54,6 +96,26 @@ public class BookService {
     }
 
     // ---- 内部 ----
+
+    private Book requireBook(long id) {
+        Book book = bookMapper.selectById(id);
+        if (book == null) {
+            throw new NoSuchElementException("书籍不存在");
+        }
+        return book;
+    }
+
+    private BookDetail toDetail(Book book, int chapterCount) {
+        return new BookDetail(
+                book.getId(),
+                book.getTitle(),
+                book.getAuthor(),
+                book.getLanguage(),
+                book.getCoverPath() == null ? null : "/api/books/" + book.getId() + "/cover",
+                book.getFileHash(),
+                book.getFileSize(),
+                chapterCount);
+    }
 
     private void writeFiles(String hash, ParsedEpub parsed, byte[] epubBytes) {
         try {

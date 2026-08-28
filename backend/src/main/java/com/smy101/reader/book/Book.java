@@ -5,7 +5,7 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 /** 书籍:服务端登记的一部 EPUB 的元数据(术语见 CONTEXT.md)。 */
 @Data
@@ -27,6 +27,6 @@ public class Book {
 
     private Long fileSize;
 
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private OffsetDateTime createdAt;
+    private OffsetDateTime updatedAt;
 }
