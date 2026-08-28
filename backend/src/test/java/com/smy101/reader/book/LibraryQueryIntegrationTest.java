@@ -34,7 +34,7 @@ class LibraryQueryIntegrationTest extends IntegrationTestBase {
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(TOKEN);
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-        body.add("file", new ByteArrayResource(BookUploadIntegrationTest.readFixture("normal.epub")) {
+        body.add("file", new ByteArrayResource(readFixture("normal.epub")) {
             @Override
             public String getFilename() {
                 return "normal.epub";
@@ -126,7 +126,7 @@ class LibraryQueryIntegrationTest extends IntegrationTestBase {
     }
 
     private byte[] coverBytes() throws IOException, NoSuchAlgorithmException {
-        byte[] epub = BookUploadIntegrationTest.readFixture("normal.epub");
+        byte[] epub = readFixture("normal.epub");
         String hash = BookUploadIntegrationTest.sha256Hex(epub);
         return java.nio.file.Files.readAllBytes(STORAGE_ROOT.resolve("covers/" + hash + ".png"));
     }

@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -61,8 +62,15 @@ public abstract class IntegrationTestBase {
     @Autowired
     protected JdbcTemplate jdbc;
 
+    /** 读 fixtures 目录下的 EPUB(正常/损坏/DRM/字体混淆)。 */
+    protected static byte[] readFixture(String name) throws IOException {
+        return new ClassPathResource("fixtures/" + name).getInputStream().readAllBytes();
+    }
+
     @BeforeEach
     void cleanState() throws IOException {
+        jdbc.update("DELETE FROM highlight");
+        jdbc.update("DELETE FROM reading_progress");
         jdbc.update("DELETE FROM chapter");
         jdbc.update("DELETE FROM book");
         try (Stream<Path> entries = Files.list(STORAGE_ROOT)) {

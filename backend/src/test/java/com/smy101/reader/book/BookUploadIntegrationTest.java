@@ -3,7 +3,6 @@ package com.smy101.reader.book;
 import com.smy101.reader.IntegrationTestBase;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -138,10 +137,6 @@ class BookUploadIntegrationTest extends IntegrationTestBase {
 
     private Integer countTable(String table) {
         return jdbc.queryForObject("SELECT count(*) FROM " + table, Integer.class);
-    }
-
-    static byte[] readFixture(String name) throws IOException {
-        return new ClassPathResource("fixtures/" + name).getInputStream().readAllBytes();
     }
 
     static String sha256Hex(byte[] bytes) throws NoSuchAlgorithmException {

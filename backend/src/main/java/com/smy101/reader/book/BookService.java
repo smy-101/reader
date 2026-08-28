@@ -37,7 +37,8 @@ public class BookService {
     private final TransactionTemplate transactionTemplate;
 
     public List<Book> listAll() {
-        return bookMapper.selectList(null);
+        return bookMapper.selectList(new LambdaQueryWrapper<Book>()
+                .orderByDesc(Book::getId)); // 新上传在前(书库默认序)
     }
 
     /** 详情;不存在抛 NoSuchElementException(→ 404)。 */

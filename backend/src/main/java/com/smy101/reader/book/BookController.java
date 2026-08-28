@@ -4,6 +4,7 @@ import com.smy101.reader.book.dto.BookDetail;
 import com.smy101.reader.book.dto.BookListItem;
 import com.smy101.reader.book.dto.ChapterListItem;
 import com.smy101.reader.book.dto.UploadBookResponse;
+import com.smy101.reader.reading.ReadingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -35,6 +36,7 @@ public class BookController {
             "svg", MediaType.parseMediaType("image/svg+xml"));
 
     private final BookService bookService;
+    private final ReadingService readingService;
 
     /** 上传 EPUB(FR-101):同步解析 → 入库 → 落盘;响应含完整元数据。 */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -42,16 +44,17 @@ public class BookController {
         return bookService.upload(file.getBytes());
     }
 
-    /** 书库列表(FR-103):封面、标题、作者;进度百分比 M0 占位恒空,M1 接通。 */
+    /** 书库列表(FR-103):封面、标题、作者 + 真实进度百分比(M1 接通 reading_progress);新上传在前。 */
     @GetMapping
     public List<BookListItem> listBooks() {
+        Map<Long, Integer> percents = readingService.progressPercentByBookId();
         return bookService.listAll().stream()
                 .map(book -> new BookListItem(
                         book.getId(),
                         book.getTitle(),
                         book.getAuthor(),
                         book.getCoverPath() == null ? null : "/api/books/" + book.getId() + "/cover",
-                        null))
+                        percents.get(book.getId())))
                 .toList();
     }
 

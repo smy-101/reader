@@ -30,7 +30,7 @@ class BookFileDownloadIntegrationTest extends IntegrationTestBase {
 
     @BeforeEach
     void 上传一本书作为下载源() throws IOException {
-        epubBytes = BookUploadIntegrationTest.readFixture("normal.epub");
+        epubBytes = readFixture("normal.epub");
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(TOKEN);
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();

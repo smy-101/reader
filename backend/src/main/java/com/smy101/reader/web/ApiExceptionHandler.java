@@ -44,6 +44,12 @@ public class ApiExceptionHandler {
                 .body(Map.of("error", e.getMessage() == null ? "资源不存在" : e.getMessage()));
     }
 
+    /** 请求参数不合法(如划线缺 CFI、进度百分比越界):400 + 可读文案。 */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, String>> badArgument(IllegalArgumentException e) {
+        return badRequest(e.getMessage());
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, String>> unexpected(Exception e) {
         log.error("未处理异常", e);
