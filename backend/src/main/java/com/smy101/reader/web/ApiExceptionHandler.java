@@ -2,6 +2,7 @@ package com.smy101.reader.web;
 
 import com.smy101.reader.book.epub.EpubDrmException;
 import com.smy101.reader.book.epub.EpubParseException;
+import com.smy101.reader.llm.LlmException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -56,6 +57,13 @@ public class ApiExceptionHandler {
     public ResponseEntity<Map<String, String>> noResource(NoResourceFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(Map.of("error", "接口不存在(" + e.getResourcePath() + "):请确认后端已更新并重启"));
+    }
+
+    /** 上游 AI/embedding 服务失败(如 S3 检索时问题向量化失败):502 + 可读中文文案。 */
+    @ExceptionHandler(LlmException.class)
+    public ResponseEntity<Map<String, String>> upstream(LlmException e) {
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(Map.of("error", e.getMessage() == null ? "上游 AI 服务失败" : e.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)
