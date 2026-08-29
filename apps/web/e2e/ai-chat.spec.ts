@@ -1,7 +1,7 @@
 import {expect, test, type Page} from '@playwright/test'
 import {resetBackend} from './global-setup'
 import {E2E_STUB_BASE_URL, E2E_STUB_REPLY_FULL, stubLastRequestBody} from './stub-llm'
-import {uploadFiles} from './helpers'
+import {dragSelectFirstParagraph, uploadFiles, waitForRendered} from './helpers'
 
 /**
  * M3-04:S2 当前书问答全链路(Seam B,E2E harness 内置本地流式 stub LLM,零外网依赖):
@@ -50,6 +50,7 @@ test('S2 全链路:配置 → 提问携带当前章 → 流式渲染 → 落库 
     await configureModelViaUi(page)
     await page.getByTestId('book-card').click()
     await expect(page.getByTestId('reader-root')).toBeVisible()
+    await waitForRendered(page) // 等正文渲染与首次 relocate(目标章映射依赖,D-31)
 
     // 打开 AI 面板,发起 S2 提问(缺省携带当前阅读位置所在章,D-31)
     await page.getByTestId('ai-toggle').click()
@@ -119,4 +120,49 @@ test('未配置模型设置提问 → 显式引导文案', async ({page}) => {
     await expect(page.getByTestId('ai-error')).toContainText('尚未配置模型设置')
     // 未受理:不建会话、不落消息
     expect(await serverSessions(page)).toHaveLength(0)
+})
+
+test('S1 划选 → 问 AI → 流式返回 → 选中引用落库(自动落最近活跃会话,D-32)', async ({page}) => {
+    await page.goto('/')
+    await uploadFiles(page, 'm1-e2e.epub')
+    await configureModelViaUi(page)
+    await page.getByTestId('book-card').click()
+    await expect(page.getByTestId('reader-root')).toBeVisible()
+    await waitForRendered(page)
+
+    // 先有一场 S2 对话(该书最近活跃会话存在)
+    await page.getByTestId('ai-toggle').click()
+    await page.getByTestId('ai-input').fill('先聊两句')
+    await page.getByTestId('ai-send').click()
+    await expect(page.getByTestId('ai-assistant-msg').last()).toBeVisible({timeout: 15_000})
+
+    // 划选(真实拖选手势,复用 M1 验证链路)→ 划选菜单「问 AI」→ 面板带出选中引用
+    await dragSelectFirstParagraph(page)
+    await page.getByTestId('ask-ai').click()
+    await expect(page.getByTestId('ai-panel')).toBeVisible()
+    await expect(page.getByTestId('ai-selection-quote')).toBeVisible()
+
+    await page.getByTestId('ai-input').fill('这段什么意思?')
+    await page.getByTestId('ai-send').click()
+    await expect(page.getByTestId('ai-streaming')).toBeVisible()
+
+    // 同一会话(D-32):仍只有一场会话;等第 4 条消息(助手回复)落库
+    const sessions = await serverSessions(page)
+    expect(sessions).toHaveLength(1)
+    await expect.poll(async () => (await serverMessages(page, sessions[0].id)).length,
+        {timeout: 15_000}).toBe(4)
+    const messages = await serverMessages(page, sessions[0].id)
+    expect(messages[2].role).toBe('user')
+    expect(JSON.stringify(messages[2].refs)).toContain('selection')
+    expect(messages[3].role).toBe('assistant')
+    expect(messages[3].content).toBe(E2E_STUB_REPLY_FULL)
+
+    // 消息流中该条提问可见选中文字引用(引用可回溯,FR-301);回复完整渲染
+    await expect(page.getByTestId('ai-msg-ref-selection').last()).toBeVisible()
+    await expect(page.getByTestId('ai-assistant-msg').last()).toHaveText(E2E_STUB_REPLY_FULL)
+
+    // S1 槽位:发给上游的 prompt 书内容 = 选中文字(不装整书/整章)
+    const prompt = await stubLastRequestBody()
+    expect(prompt).toContain('【选中文字】')
+    expect(prompt).toContain('这段什么意思?')
 })

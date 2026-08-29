@@ -223,6 +223,12 @@ export function Reader({bookId, onExit}: { bookId: number; onExit: () => void })
                     hl.setSelection(null)
                     hl.setEditing(null)
                 }}
+                onAskAi={sel => {
+                    // S1 选中即问(D-32):带连中文字开 AI 面板,提问自动落该书最近活跃会话
+                    setPendingSelection({text: sel.text, cfi: sel.cfi})
+                    setAiOpen(true)
+                    hl.setSelection(null)
+                }}
             />
         </main>
     )

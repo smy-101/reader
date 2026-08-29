@@ -29,6 +29,8 @@ export function AiPanel({bookId, view, relocateRef, pendingSelection, onClearPen
     const [messages, setMessages] = useState<ChatMessage[]>([])
     const [input, setInput] = useState('')
     const [streamText, setStreamText] = useState<string | null>(null)
+    /** 流式文本镜像(updater 外读,避免 setState 嵌套副作用;StrictMode 下 updater 双调会重复落消息) */
+    const streamTextRef = useRef('')
     const [askError, setAskError] = useState<string | null>(null)
     const [note, setNote] = useState<string | null>(null)
     const [renaming, setRenaming] = useState<number | null>(null)
@@ -126,6 +128,7 @@ export function AiPanel({bookId, view, relocateRef, pendingSelection, onClearPen
         }])
         setInput('')
         onClearPending()
+        streamTextRef.current = ''
         setStreamText('')
 
         try {
@@ -137,30 +140,31 @@ export function AiPanel({bookId, view, relocateRef, pendingSelection, onClearPen
                         ? prev.map(s => (s.id === meta.sessionId ? {...s, title: meta.sessionTitle} : s))
                         : [{id: meta.sessionId, bookId, title: meta.sessionTitle, createdAt: '', updatedAt: ''}, ...prev])
                 },
-                onDelta: text => setStreamText(prev => (prev ?? '') + text),
+                onDelta: text => {
+                    streamTextRef.current += text
+                    setStreamText(streamTextRef.current)
+                },
                 onDone: done => {
-                    setStreamText(prev => {
-                        if (prev != null) {
-                            setMessages(msgs => [...msgs, {
-                                id: done.assistantMessageId, sessionId: activeId ?? 0,
-                                role: 'assistant', content: prev, refs: null, createdAt: '',
-                            }])
-                        }
-                        return null
-                    })
+                    const content = streamTextRef.current
+                    if (content) {
+                        setMessages(msgs => [...msgs, {
+                            id: done.assistantMessageId, sessionId: activeId ?? 0,
+                            role: 'assistant' as const, content, refs: null, createdAt: '',
+                        }])
+                    }
+                    setStreamText(null)
                     if (done.note) setNote(done.note)
                 },
                 onError: message => {
-                    setStreamText(prev => {
-                        if (prev) {
-                            // 中断:已到内容照常展示(与后端落库口径一致)
-                            setMessages(msgs => [...msgs, {
-                                id: -Date.now(), sessionId: activeId ?? 0,
-                                role: 'assistant', content: prev, refs: null, createdAt: '',
-                            }])
-                        }
-                        return null
-                    })
+                    const partial = streamTextRef.current
+                    if (partial) {
+                        // 中断:已到内容照常展示(与后端落库口径一致)
+                        setMessages(msgs => [...msgs, {
+                            id: -Date.now(), sessionId: activeId ?? 0,
+                            role: 'assistant' as const, content: partial, refs: null, createdAt: '',
+                        }])
+                    }
+                    setStreamText(null)
                     setAskError(message)
                 },
             })

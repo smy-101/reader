@@ -5,7 +5,7 @@ import {HIGHLIGHT_COLORS, colorHex, snippet} from '../reader/highlight-colors'
 
 /**
  * 划线操作条(阅读器底部固定条):
- * - 有选中文本时:选色(可选)→ 划线,或取消
+ * - 有选中文本时:选色(可选)→ 划线、问 AI(S1 选中即问)、或取消
  * - 正在编辑已有划线时:改色 / 改备注 / 删除 / 跳转
  */
 export function HighlightBar({
@@ -16,6 +16,7 @@ export function HighlightBar({
     onDelete,
     onJump,
     onClose,
+    onAskAi,
 }: {
     selection: PendingSelection | null
     editing: Highlight | null
@@ -24,6 +25,7 @@ export function HighlightBar({
     onDelete: (id: number) => Promise<unknown>
     onJump: (h: Highlight) => void
     onClose: () => void
+    onAskAi?: (selection: PendingSelection) => void
 }) {
     const [color, setColor] = useState<string>('yellow')
     const [note, setNote] = useState('')
@@ -75,6 +77,12 @@ export function HighlightBar({
                         })}
                     >
                         划线
+                    </button>
+                    <button
+                        data-testid="ask-ai"
+                        onClick={() => onAskAi?.(selection)}
+                    >
+                        问 AI
                     </button>
                     <button data-testid="cancel-selection" onClick={onClose}>取消</button>
                 </>

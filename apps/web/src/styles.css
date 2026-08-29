@@ -362,6 +362,7 @@ button {
     display: flex;
     flex: 1;
     min-height: 0;
+    position: relative; /* AI 面板(absolute 覆盖层)的定位锚:面板开合不压缩正文,避免 foliate 重排 */
 }
 
 .toc-panel {
@@ -395,7 +396,7 @@ button {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    position: relative;
+    position: relative; /* AI 面板 absolute 的定位锚 */
 }
 
 .foliate-host {
@@ -408,12 +409,18 @@ button {
 /* ---- 划线(M1-07) ---- */
 
 .highlight-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 10px 16px;
     border-top: 1px solid #8884;
     background: inherit;
+    box-shadow: 0 -6px 18px #0002;
     flex-wrap: wrap;
 }
 
@@ -487,12 +494,17 @@ button {
 /* ---- AI 伴读面板(M3) ---- */
 
 .ai-panel {
-    width: 360px;
-    min-width: 320px;
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 380px;
     display: flex;
     flex-direction: column;
     border-left: 1px solid #8884;
     background: inherit;
+    box-shadow: -8px 0 24px #0002;
+    z-index: 40;
 }
 
 .ai-panel-header {
