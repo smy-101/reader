@@ -35,6 +35,12 @@ class BookDeletionIntegrationTest extends IntegrationTestBase {
         STUB.close();
     }
 
+    @org.springframework.test.context.DynamicPropertySource
+    static void fastEmbeddingTimeout(org.springframework.test.context.DynamicPropertyRegistry registry) {
+        // 嵌入中删书竞态用例:上游挂死时客户端快速超时,worker 不长期阻塞
+        registry.add("reader.llm.embedding-request-timeout-ms", () -> "2000");
+    }
+
     @Test
     void 删除书籍_文件与四域数据全清_DB无残留() throws IOException {
         long bookId = uploadBook();
@@ -60,8 +66,9 @@ class BookDeletionIntegrationTest extends IntegrationTestBase {
                 new HttpEntity<>(authHeaders()), Void.class);
         assertThat(deleted.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
 
-        // DB:书与四域数据无残留(章节/划线/进度/该书会话与消息)
-        for (String table : List.of("book", "chapter", "highlight", "reading_progress", "chat_session", "chat_message")) {
+        // DB:书与全域名数据无残留(章节/划线/进度/该书会话与消息/向量块/嵌入任务,FR-104 最后一块)
+        for (String table : List.of("book", "chapter", "highlight", "reading_progress",
+                "chat_session", "chat_message", "document_chunk", "embedding_job")) {
             Integer count = jdbc.queryForObject("SELECT count(*) FROM " + table, Integer.class);
             assertThat(count).as(table).isZero();
         }
@@ -78,6 +85,64 @@ class BookDeletionIntegrationTest extends IntegrationTestBase {
         ResponseEntity<String> detail = rest.exchange("/api/books/" + bookId, HttpMethod.GET,
                 new HttpEntity<>(authHeaders()), String.class);
         assertThat(detail.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void 删除已嵌入书_向量块与嵌入任务一并清净() throws IOException {
+        // 配置 embedding → 上传自动嵌入至 done
+        rest.exchange("/api/settings/model", HttpMethod.PUT, new HttpEntity<>(Map.of(
+                "baseUrl", STUB.baseUrl(), "apiKey", "sk-t", "chatModel", "stub-chat",
+                "embeddingModel", "bge-m3"), authJsonHeaders()), String.class);
+        long bookId = uploadBook();
+        awaitEmbeddingTerminal(bookId);
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM document_chunk WHERE book_id = ?", Integer.class, bookId)).isPositive();
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM embedding_job WHERE book_id = ?", Integer.class, bookId)).isPositive();
+
+        ResponseEntity<Void> deleted = rest.exchange("/api/books/" + bookId, HttpMethod.DELETE,
+                new HttpEntity<>(authHeaders()), Void.class);
+        assertThat(deleted.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+
+        // 向量块与嵌入任务行全清(外键级联),既有级联回归同上
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM document_chunk", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM embedding_job", Integer.class)).isZero();
+    }
+
+    @Test
+    void 嵌入进行中删书_删除不被阻塞_无残留() throws IOException {
+        // 上游 embeddings 挂住:任务停在 running,此时删书
+        rest.exchange("/api/settings/model", HttpMethod.PUT, new HttpEntity<>(Map.of(
+                "baseUrl", STUB.baseUrl(), "apiKey", "sk-t", "chatModel", "stub-chat",
+                "embeddingModel", "bge-m3"), authJsonHeaders()), String.class);
+        STUB.hangEmbeddings();
+        long bookId = uploadBook();
+
+        // 等到 running(worker 已挂在上游调用里),删书不应被阻塞
+        long deadline = System.nanoTime() + 10_000_000_000L;
+        while (System.nanoTime() < deadline) {
+            String status = jdbc.queryForObject(
+                    "SELECT status FROM embedding_job WHERE book_id = ? ORDER BY id DESC LIMIT 1",
+                    String.class, bookId);
+            if ("running".equals(status)) {
+                break;
+            }
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            }
+        }
+
+        ResponseEntity<Void> deleted = rest.exchange("/api/books/" + bookId, HttpMethod.DELETE,
+                new HttpEntity<>(authHeaders()), Void.class);
+        assertThat(deleted.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+
+        // 任务与已入块清净(级联);worker 超时后回写失败 → 任务行已不存在 → 无操作,不留尸块
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM embedding_job", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM document_chunk", Integer.class)).isZero();
+        STUB.embeddingsOk();
     }
 
     @Test
@@ -115,6 +180,27 @@ class BookDeletionIntegrationTest extends IntegrationTestBase {
     }
 
     // ---- helpers ----
+
+    /** 轮询至该书最新嵌入任务终态(done/failed)。 */
+    private void awaitEmbeddingTerminal(long bookId) {
+        long deadline = System.nanoTime() + 20_000_000_000L;
+        while (System.nanoTime() < deadline) {
+            String status = jdbc.queryForObject(
+                    "SELECT status FROM embedding_job WHERE book_id = ? ORDER BY id DESC LIMIT 1",
+                    String.class, bookId);
+            if ("done".equals(status) || "failed".equals(status)) {
+                assertThat(status).isEqualTo("done");
+                return;
+            }
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            }
+        }
+        throw new AssertionError("嵌入未在时限内到达终态");
+    }
 
     private void configureStubModel() {
         rest.exchange("/api/settings/model", HttpMethod.PUT, new HttpEntity<>(Map.of(

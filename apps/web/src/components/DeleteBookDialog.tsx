@@ -3,8 +3,8 @@ import type {BookListItem} from '@reader/api-client'
 import {api} from '../client'
 
 /**
- * 删书确认弹窗(FR-104):明示级联范围——书源文件与封面、划线、进度、该书全部会话;
- * 确认后调 DELETE,列表由父级刷新。向量清理是 M4 在同一删除流程上的增量,不在本期文案。
+ * 删书确认弹窗(FR-104):明示级联范围——书源文件与封面、划线、进度、该书全部会话、
+ * 向量块与嵌入任务(M4 补齐 FR-104 最后一块);确认后调 DELETE,列表由父级刷新。
  */
 export function DeleteBookDialog({book, onDone, onCancel}: {
     book: BookListItem
@@ -36,6 +36,7 @@ export function DeleteBookDialog({book, onDone, onCancel}: {
                     <li>全部划线</li>
                     <li>阅读进度</li>
                     <li>这本书的全部 AI 会话</li>
+                    <li>向量块与嵌入任务</li>
                 </ul>
                 {error && <p className="test-result error" data-testid="delete-book-error">{error}</p>}
                 <div className="dialog-actions">

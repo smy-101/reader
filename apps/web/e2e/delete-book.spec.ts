@@ -49,6 +49,7 @@ test('删书确认弹窗明示级联范围_删除后书库与该书会话清净_
     await expect(scope).toContainText('划线')
     await expect(scope).toContainText('阅读进度')
     await expect(scope).toContainText('AI 会话')
+    await expect(scope).toContainText('向量块与嵌入任务')
 
     // 取消不动;再删真删
     await page.getByTestId('delete-book-cancel').click()

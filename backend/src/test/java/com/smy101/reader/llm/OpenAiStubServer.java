@@ -103,6 +103,11 @@ public class OpenAiStubServer implements AutoCloseable {
         this.embeddingsBehavior = Behavior.of(status, jsonBody);
     }
 
+    /** embeddings 上游挂死:握住连接不响应 → 客户端请求超时(嵌入中删书竞态用例用)。 */
+    public void hangEmbeddings() {
+        this.embeddingsBehavior = new Behavior(200, null, true);
+    }
+
     /** embeddings 上游恢复成功(确定性向量)。 */
     public void embeddingsOk() {
         this.embeddingsBehavior = Behavior.of(200, null);
@@ -175,13 +180,13 @@ public class OpenAiStubServer implements AutoCloseable {
                 respond(exchange, 404, "{\"error\":{\"message\":\"Unknown path\"}}");
                 return;
             }
-            if ("/v1/embeddings".equals(path) && behavior.status() == 200 && behavior.body() == null) {
-                respond(exchange, 200, deterministicEmbeddings(body));
-                return;
-            }
             if (behavior.hang()) {
                 // 握住连接不响应,让客户端超时(测试连接超时文案)
                 Thread.sleep(10_000);
+                return;
+            }
+            if ("/v1/embeddings".equals(path) && behavior.status() == 200 && behavior.body() == null) {
+                respond(exchange, 200, deterministicEmbeddings(body));
                 return;
             }
             if (behavior.status() == 200 && behavior.body() != null && behavior.body().startsWith("sse:")) {
