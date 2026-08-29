@@ -9,15 +9,15 @@ import {uploadFiles} from './helpers'
  * 存量书手动首次嵌入;失败(独立 base_url 不可达)→ 可读错误 + 重试至完成。
  */
 
-/** 经设置页 UI 配置模型指向 stub(含 embedding;embeddingBaseUrl 可选,空 = 跟随 chat)。 */
-async function configureModelViaUi(page: Page, embeddingBaseUrl?: string): Promise<void> {
+/** 经设置页 UI 配置模型指向 stub;embeddingModel 传空串 = 不配置 embedding。 */
+async function configureModelViaUi(page: Page, embeddingModel = 'bge-m3', embeddingBaseUrl?: string): Promise<void> {
     await page.getByTestId('model-settings-open').click()
     await expect(page.getByTestId('model-settings-dialog')).toBeVisible()
     await page.getByTestId('model-base-url').fill(E2E_STUB_BASE_URL)
     await page.getByTestId('model-api-key').fill('sk-e2e-stub')
     await page.getByTestId('model-chat-model').fill('stub-chat')
-    await page.getByTestId('model-embedding-model').fill('bge-m3')
-    // 独立地址传 undefined 表示清空(跟随 chat);面板会回填旧值,必须显式覆盖
+    await page.getByTestId('model-embedding-model').fill(embeddingModel)
+    // 独立地址一律显式覆盖(面板会回填旧值,不清空则沿用上次的独立地址)
     await page.getByTestId('model-embedding-base-url').fill(embeddingBaseUrl ?? '')
     await page.getByTestId('model-settings-save').click()
     await expect(page.getByTestId('model-saved-hint')).toBeVisible()
@@ -69,7 +69,7 @@ test('存量书(未配置期上传)手动触发首次嵌入至完成', async ({p
 
 test('嵌入失败(独立 base_url 不可达)→ 可读错误 + 重试至完成', async ({page}) => {
     await page.goto('/')
-    await configureModelViaUi(page, 'http://127.0.0.1:9/v1') // 独立 embedding 地址不可达
+    await configureModelViaUi(page, 'bge-m3', 'http://127.0.0.1:9/v1') // 独立 embedding 地址不可达
     await uploadFiles(page, 'm1-e2e.epub')
 
     await expect(page.getByTestId('embedding-status').first())
@@ -80,4 +80,23 @@ test('嵌入失败(独立 base_url 不可达)→ 可读错误 + 重试至完成'
     await page.getByTestId('embedding-trigger').first().click()
     await expect(page.getByTestId('embedding-status').first())
         .toContainText('已嵌入 · bge-m3', {timeout: 30_000})
+})
+
+test('换模型 → 状态卡提示需重新嵌入 → 重嵌入入口跑通至新模型(US 13)', async ({page}) => {
+    await page.goto('/')
+    await configureModelViaUi(page, 'bge-m3')
+    await uploadFiles(page, 'm1-e2e.epub')
+    await expect(page.getByTestId('embedding-status').first())
+        .toContainText('已嵌入 · bge-m3', {timeout: 30_000})
+
+    // 换 embedding 模型:状态卡明示需重新嵌入(不再静默停留在旧模型)
+    await configureModelViaUi(page, 'bge-m3-v2')
+    await expect(page.getByTestId('embedding-status').first())
+        .toContainText('模型已更换', {timeout: 10_000})
+    await expect(page.getByTestId('embedding-status').first()).toContainText('bge-m3-v2')
+
+    // 重新嵌入(同一触发入口)→ 全量重嵌入至新模型
+    await page.getByTestId('embedding-trigger').first().click()
+    await expect(page.getByTestId('embedding-status').first())
+        .toContainText('已嵌入 · bge-m3-v2', {timeout: 30_000})
 })

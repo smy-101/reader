@@ -4,12 +4,13 @@ import {api} from '../client'
 import {EmbeddingStatusCard} from './EmbeddingStatusCard'
 
 /** 书籍卡片:封面(带 token 程序化拉取)、标题、作者、进度百分比;右上角删书入口;
- * embedding 已配置时附带嵌入状态卡(M4-04;未配置时隐藏,FR-403)。 */
-export function BookCard({book, onOpen, onDelete, showEmbedding}: {
+ * embedding 已配置(模型名非空)时附带嵌入状态卡(M4-04;未配置时隐藏,FR-403)。 */
+export function BookCard({book, onOpen, onDelete, embeddingModel}: {
     book: BookListItem
     onOpen: () => void
     onDelete: () => void
-    showEmbedding?: boolean
+    /** 当前配置的 embedding 模型;非空才显示嵌入状态卡,并用于“模型已更换”裁决 */
+    embeddingModel?: string | null
 }) {
     const [coverUrl, setCoverUrl] = useState<string | null>(null)
 
@@ -60,7 +61,7 @@ export function BookCard({book, onOpen, onDelete, showEmbedding}: {
             >
                 删除
             </button>
-            {showEmbedding && <EmbeddingStatusCard bookId={book.id}/>}
+            {embeddingModel != null && <EmbeddingStatusCard bookId={book.id} embeddingModel={embeddingModel}/>}
         </div>
     )
 }

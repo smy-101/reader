@@ -74,6 +74,34 @@ public class EmbeddingJobService {
         this.embeddingsClient = embeddingsClient;
         this.batchSize = Math.max(1, properties.getLlm().getEmbeddingBatchSize());
         this.worker.execute(this::loop);
+        recoverInterruptedJobs();
+    }
+
+    /**
+     * 启动恢复(评审 P1):队列在内存,后端重启会丢 pending/running 任务的执行机会——
+     * 任务行永远停在非终态,trigger 又被串行语义吸收,状态卡会无限“嵌入中”。
+     * 恢复 = 把非终态任务重置回 pending(执行本就从0重跑)并重新入队;书已删则入队后无操作。
+     */
+    private void recoverInterruptedJobs() {
+        try {
+            List<Long> bookIds = jobMapper.selectList(new LambdaQueryWrapper<EmbeddingJob>()
+                            .select(EmbeddingJob::getBookId)
+                            .in(EmbeddingJob::getStatus, EmbeddingJob.STATUS_PENDING, EmbeddingJob.STATUS_RUNNING))
+                    .stream().map(EmbeddingJob::getBookId).distinct().toList();
+            for (Long bookId : bookIds) {
+                jobMapper.update(null, new LambdaUpdateWrapper<EmbeddingJob>()
+                        .eq(EmbeddingJob::getBookId, bookId)
+                        .in(EmbeddingJob::getStatus, EmbeddingJob.STATUS_PENDING, EmbeddingJob.STATUS_RUNNING)
+                        .set(EmbeddingJob::getStatus, EmbeddingJob.STATUS_PENDING)
+                        .setSql("updated_at = now()"));
+                enqueue(bookId);
+            }
+            if (!bookIds.isEmpty()) {
+                log.info("启动恢复:重新入队 {} 本书的未完成嵌入任务", bookIds.size());
+            }
+        } catch (Exception e) {
+            log.warn("启动恢复嵌入任务失败(不影响应用启动)", e);
+        }
     }
 
     // ---- 上传自动嵌入(嵌入是增益:任何异常不冒泡到上传链路) ----
@@ -111,10 +139,19 @@ public class EmbeddingJobService {
         return latest == null ? EmbeddingDtos.StatusDto.none(bookId) : toDto(latest);
     }
 
+    /** 某书最新一条任务(嵌入就绪度裁决与状态查询共用,避免两处重复解读同一查询)。 */
+    public EmbeddingJob latestJob(long bookId) {
+        return jobMapper.selectOne(new LambdaQueryWrapper<EmbeddingJob>()
+                .eq(EmbeddingJob::getBookId, bookId)
+                .orderByDesc(EmbeddingJob::getId)
+                .last("LIMIT 1"));
+    }
+
     // ---- 内部:任务创建与执行 ----
 
-    /** 建任务规则与 {@link #trigger} 同;已排队/进行中/同模型已完成的幂等跳过。 */
-    private EmbeddingDtos.StatusDto createJobIfNeeded(long bookId) {
+    /** 建任务规则与 {@link #trigger} 同;已排队/进行中/同模型已完成的幂等跳过。
+     * synchronized:上传自动建任务与手动触发并发时不会重复建 pending 行(串行裁决单一入口)。 */
+    private synchronized EmbeddingDtos.StatusDto createJobIfNeeded(long bookId) {
         EmbeddingJob latest = latestJob(bookId);
         if (latest != null) {
             if (EmbeddingJob.STATUS_PENDING.equals(latest.getStatus())
@@ -249,13 +286,6 @@ public class EmbeddingJobService {
     private String currentModel() {
         ModelSettings settings = settingsMapper.selectById(1);
         return settings == null ? null : settings.getEmbeddingModel();
-    }
-
-    private EmbeddingJob latestJob(long bookId) {
-        return jobMapper.selectOne(new LambdaQueryWrapper<EmbeddingJob>()
-                .eq(EmbeddingJob::getBookId, bookId)
-                .orderByDesc(EmbeddingJob::getId)
-                .last("LIMIT 1"));
     }
 
     private void update(long jobId, java.util.function.Consumer<LambdaUpdateWrapper<EmbeddingJob>> setter) {

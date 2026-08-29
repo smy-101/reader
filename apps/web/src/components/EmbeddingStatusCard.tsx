@@ -6,13 +6,19 @@ import {api} from '../client'
  * 嵌入状态卡(M4-04):进行中显示进度(已完成块数/总块数)并轮询;失败显示可读错误与
  * 「重试」;完成显示所用模型与「重新嵌入」;未嵌入(存量书)显示「嵌入」——
  * 四态同一触发端点(多态一语义:首次嵌入 / 失败重试 / 换模型全量重嵌入)。
- * 未配置 embedding 时由父级整体隐藏(FR-403,本组件不感知)。
+ * 完成但模型已换(US 13):明示「embedding 模型已更换,需重新嵌入」,S3 入口在
+ * 重嵌入完成前隐藏(AiPanel 侧同一裁决)。未配置 embedding 时由父级整体隐藏(FR-403)。
  */
 
-/** 轮询间隔:进行中(pending/running)每 1.5s 拉一次进度。 */
+/** 轮询间隔:进行中(pending/running)每 1.5s 拉一次进度;拉取失败 5s 后重试。 */
 const POLL_INTERVAL_MS = 1500
+const RETRY_INTERVAL_MS = 5000
 
-export function EmbeddingStatusCard({bookId}: { bookId: number }) {
+export function EmbeddingStatusCard({bookId, embeddingModel}: {
+    bookId: number
+    /** 当前配置的 embedding 模型(父级从模型设置拉取);与任务模型比对裁决“模型已更换” */
+    embeddingModel: string | null
+}) {
     const [status, setStatus] = useState<EmbeddingStatus | null>(null)
     const [actionError, setActionError] = useState<string | null>(null)
     const [busy, setBusy] = useState(false)
@@ -27,11 +33,14 @@ export function EmbeddingStatusCard({bookId}: { bookId: number }) {
                 const s = await api.getEmbeddingStatus(bookId)
                 if (cancelled) return
                 setStatus(s)
+                setActionError(null)
                 if (s.status === 'pending' || s.status === 'running') {
                     timerRef.current = setTimeout(() => void tick(), POLL_INTERVAL_MS)
                 }
             } catch (e) {
-                if (!cancelled) setActionError(e instanceof Error ? e.message : String(e))
+                if (cancelled) return
+                setActionError(e instanceof Error ? e.message : String(e))
+                timerRef.current = setTimeout(() => void tick(), RETRY_INTERVAL_MS) // 拉取失败不永久停摆
             }
         }
         void tick()
@@ -53,6 +62,11 @@ export function EmbeddingStatusCard({bookId}: { bookId: number }) {
             setBusy(false)
         }
     }
+
+    /** done 但模型已换:需全量重嵌入,否则 S3/检索式降级不可用(US 13) */
+    const modelChanged = status?.status === 'done'
+        && embeddingModel != null
+        && status.model !== embeddingModel
 
     const s = status
     return (
@@ -82,8 +96,13 @@ export function EmbeddingStatusCard({bookId}: { bookId: number }) {
             )}
             {s?.status === 'done' && (
                 <>
-                    <span className="embedding-status ok" data-testid="embedding-status"
-                          data-model={s.model ?? ''}>已嵌入 · {s.model}</span>
+                    <span className={`embedding-status ${modelChanged ? 'error' : 'ok'}`}
+                          data-testid="embedding-status"
+                          data-model={s.model ?? ''}>
+                        {modelChanged
+                            ? `embedding 模型已更换(${s.model} → ${embeddingModel}),需重新嵌入`
+                            : `已嵌入 · ${s.model}`}
+                    </span>
                     <button className="embedding-action" onClick={() => void trigger()} disabled={busy}
                             data-testid="embedding-trigger">重新嵌入
                     </button>

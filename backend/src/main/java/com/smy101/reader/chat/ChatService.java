@@ -13,8 +13,7 @@ import com.smy101.reader.chat.dto.ChatDtos;
 import com.smy101.reader.embedding.DocumentChunkRepository;
 import com.smy101.reader.embedding.EmbeddingEndpoint;
 import com.smy101.reader.embedding.EmbeddingJob;
-import com.smy101.reader.embedding.EmbeddingJobMapper;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.smy101.reader.embedding.EmbeddingJobService;
 import com.smy101.reader.llm.EmbeddingsClient;
 import com.smy101.reader.llm.LlmAdapter;
 import com.smy101.reader.llm.LlmException;
@@ -56,7 +55,7 @@ public class ChatService {
     private final LlmAdapter llmAdapter;
     private final EmbeddingsClient embeddingsClient;
     private final DocumentChunkRepository chunkRepository;
-    private final EmbeddingJobMapper embeddingJobMapper;
+    private final EmbeddingJobService embeddingJobService;
     private final ObjectMapper objectMapper = new ObjectMapper();
     /** SSE 中继线程:阻塞式读上游,虚拟线程轻量(Java 21) */
     private final ExecutorService streamingExecutor = Executors.newVirtualThreadPerTaskExecutor();
@@ -69,7 +68,7 @@ public class ChatService {
                        LlmAdapter llmAdapter,
                        EmbeddingsClient embeddingsClient,
                        DocumentChunkRepository chunkRepository,
-                       EmbeddingJobMapper embeddingJobMapper) {
+                       EmbeddingJobService embeddingJobService) {
         this.sessionMapper = sessionMapper;
         this.messageMapper = messageMapper;
         this.bookMapper = bookMapper;
@@ -78,7 +77,7 @@ public class ChatService {
         this.llmAdapter = llmAdapter;
         this.embeddingsClient = embeddingsClient;
         this.chunkRepository = chunkRepository;
-        this.embeddingJobMapper = embeddingJobMapper;
+        this.embeddingJobService = embeddingJobService;
     }
 
     // ---- 提问(S1 与 S2 同一通路,D-32:带 selection 即 S1) ----
@@ -307,10 +306,7 @@ public class ChatService {
         if (endpoint == null) {
             return EmbeddingReadiness.UNCONFIGURED;
         }
-        EmbeddingJob latest = embeddingJobMapper.selectOne(new LambdaQueryWrapper<EmbeddingJob>()
-                .eq(EmbeddingJob::getBookId, bookId)
-                .orderByDesc(EmbeddingJob::getId)
-                .last("LIMIT 1"));
+        EmbeddingJob latest = embeddingJobService.latestJob(bookId);
         if (latest == null) {
             return EmbeddingReadiness.NOT_EMBEDDED;
         }

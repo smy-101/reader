@@ -16,14 +16,15 @@ export function Library({onOpen}: { onOpen: (bookId: number) => void }) {
     const [settingsOpen, setSettingsOpen] = useState(false)
     const [modelSettingsOpen, setModelSettingsOpen] = useState(false)
     const [pendingDelete, setPendingDelete] = useState<BookListItem | null>(null)
-    /** embedding 是否已配置:未配置时嵌入状态卡整体隐藏(FR-403) */
-    const [embeddingConfigured, setEmbeddingConfigured] = useState(false)
+    /** 当前配置的 embedding 模型:未配置(空)时嵌入状态卡整体隐藏(FR-403),
+     * 配置时也供状态卡裁决“模型已更换,需重新嵌入”(US 13) */
+    const [embeddingModel, setEmbeddingModel] = useState<string | null>(null)
 
     const refreshEmbeddingConfigured = useCallback(async () => {
         try {
-            setEmbeddingConfigured((await api.getModelSettings()).embeddingModel != null)
+            setEmbeddingModel((await api.getModelSettings()).embeddingModel ?? null)
         } catch {
-            setEmbeddingConfigured(false) // 设置读不到按未配置处理(隐藏不报错)
+            setEmbeddingModel(null) // 设置读不到按未配置处理(隐藏不报错)
         }
     }, [])
 
@@ -114,7 +115,7 @@ export function Library({onOpen}: { onOpen: (bookId: number) => void }) {
                         book={book}
                         onOpen={() => onOpen(book.id)}
                         onDelete={() => setPendingDelete(book)}
-                        showEmbedding={embeddingConfigured}
+                        embeddingModel={embeddingModel}
                     />
                 ))}
             </section>

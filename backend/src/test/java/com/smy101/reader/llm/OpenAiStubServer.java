@@ -113,7 +113,7 @@ public class OpenAiStubServer implements AutoCloseable {
         this.embeddingsBehavior = Behavior.of(200, null);
     }
 
-    /** 确定性向量维度(默认 32;换模型重嵌入的维度变化断言用)。 */
+    /** 确定性向量维度(默认 256;换模型重嵌入的维度变化断言用)。 */
     public void setEmbeddingDimension(int dimension) {
         this.embeddingDimension = dimension;
     }

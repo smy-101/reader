@@ -404,13 +404,12 @@ function MessageBubble({message, onJump}: { message: ChatMessage; onJump: (c: {
             {citations.length > 0 && (
                 <CitationBar
                     testid="ai-msg-citations"
-                    citations={citations.map((c, i) => ({
+                    citations={citations.map(c => ({
                         chapterId: c.chapterId!,
                         chapterSeq: c.chapterSeq ?? c.seq ?? 0,
                         chapterTitle: c.chapterTitle ?? null,
                         chunkSeq: c.chunkSeq ?? 0,
                         excerpt: c.excerpt ?? '',
-                        __i: i,
                     }))}
                     onJump={onJump}/>
             )}
@@ -421,7 +420,7 @@ function MessageBubble({message, onJump}: { message: ChatMessage; onJump: (c: {
 
 /** 检索引用条(S3):章节标题 + 原文摘录,点击跳转;流式开始前(meta 后)即可见。 */
 function CitationBar({citations, onJump, testid}: {
-    citations: Array<{ chapterId: number; chapterSeq?: number; chapterTitle?: string | null; excerpt?: string; __i?: number }>
+    citations: Array<{ chapterId: number; chapterSeq?: number; chapterTitle?: string | null; excerpt?: string }>
     onJump: (c: { chapterId?: number; chapterSeq?: number; chapterTitle?: string | null; excerpt?: string }) => void
     testid: string
 }) {
@@ -429,7 +428,7 @@ function CitationBar({citations, onJump, testid}: {
         <div className="ai-citations" data-testid={testid}>
             {citations.map((c, i) => (
                 <button
-                    key={c.__i ?? i}
+                    key={`${c.chapterId}-${i}`}
                     className="ai-citation"
                     onClick={() => onJump(c)}
                     data-testid="ai-citation"
