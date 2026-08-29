@@ -380,7 +380,7 @@ public class ChatService {
         if (EmbeddingJob.STATUS_FAILED.equals(latest.getStatus())) {
             return EmbeddingReadiness.FAILED;
         }
-        return endpoint.model().equals(latest.getModel())
+        return EmbeddingJobService.isReady(latest, endpoint.model())
                 ? EmbeddingReadiness.READY
                 : EmbeddingReadiness.MODEL_CHANGED;
     }
@@ -626,7 +626,7 @@ public class ChatService {
      */
     private BudgetCalculator.BudgetPlan stripRetrievalDegradeNote(BudgetCalculator.BudgetPlan plan) {
         String note = plan.note();
-        if (note == null || !note.startsWith("目标章超出上下文预算")) {
+        if (note == null || !note.startsWith(BudgetCalculator.RETRIEVAL_DEGRADE_NOTE)) {
             return plan;
         }
         int sep = note.indexOf(';');

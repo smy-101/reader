@@ -61,17 +61,10 @@ export function Library({onOpen}: { onOpen: (bookId: number, jump?: CitationView
     }, [books, filter])
 
     // ---- S4 全局 AI 入口显隐(FR-403;与嵌入状态卡同源消费书库列表的就绪摘要,US 25) ----
-    /** 已配置 embedding 且全库至少一本就绪时入口可见;就绪摘要随列表响应携带,不逐书轮询 */
+    /** 已配置 embedding 且全库至少一本就绪时入口可见;就绪摘要随列表响应携带,不逐书轮询。
+     * 收敛时机(无推送,v1 口径 D-44):页面挂载/上传/删书/设置变更时重拉列表;
+     * 嵌入转入 done 由状态卡边沿回调重拉(见 onEmbeddingSettled)。 */
     const globalAiReady = embeddingModel != null && books.some(b => b.embedding?.ready)
-
-    // 全库无就绪书但仍有书在嵌入中:每 2s 重拉列表直至收敛(完成即亮;无推送,v1 口径 D-44)
-    useEffect(() => {
-        if (embeddingModel == null || globalAiReady) return
-        const inProgress = books.some(b => b.embedding?.status === 'pending' || b.embedding?.status === 'running')
-        if (!inProgress) return
-        const timer = setTimeout(() => void refresh(), 2000)
-        return () => clearTimeout(timer)
-    }, [books, embeddingModel, globalAiReady, refresh])
 
     const handleUploaded = useCallback((results: UploadResult[]) => {
         // 任一本成功(新增或已在书库)都刷新列表;结果明细由 UploadPanel 展示

@@ -80,6 +80,10 @@ class CrossBookAskIntegrationTest extends IntegrationTestBase {
         assertThat(system).contains("壬戌之秋");       // 赤壁赋选内容进了 prompt
         assertThat(system).contains("嵌套内层脚注");    // 正常书第三章独有内容进了 prompt
 
+        // 流式回复照常;done 事件无降级说明(跨书恒检索式是设计而非降级,降级文案不得外漏)
+        String doneNote = (String) read(dataLine(body, "done"), "$.note");
+        assertThat(doneNote).isNull();
+
         // 助手消息 refs 落库带 bookId + 书名快照,重新拉取会话消息引用仍在
         String refs = jdbc.queryForObject(
                 "SELECT refs::text FROM chat_message WHERE role = 'assistant'", String.class);
@@ -165,7 +169,7 @@ class CrossBookAskIntegrationTest extends IntegrationTestBase {
     // ---- 会话路由与列表 ----
 
     @Test
-    void 显式会话id指向书级会话_400可读错误() throws IOException {
+    void 显式会话id指向书级会话_404可读错误() throws IOException {
         prepareTwoEmbeddedBooks();
         // 先做一次书级提问造一个书级会话
         rest.exchange("/api/books/" + normalBookId + "/ask", HttpMethod.POST,
@@ -179,7 +183,7 @@ class CrossBookAskIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
-    void 全局会话列表只含跨书会话_书级列表不含跨书会话() throws IOException {
+    void 跨书会话列表只含跨书会话_书级列表不含跨书会话() throws IOException {
         prepareTwoEmbeddedBooks();
         long globalId = askGlobalForSessionId(Map.of("content", "跨书对比问题"));
         rest.exchange("/api/books/" + normalBookId + "/ask", HttpMethod.POST,

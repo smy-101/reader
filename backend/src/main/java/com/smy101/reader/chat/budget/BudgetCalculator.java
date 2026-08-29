@@ -19,6 +19,12 @@ public final class BudgetCalculator {
     /** D-27:上下文上限未填的保守缺省。 */
     public static final int DEFAULT_CONTEXT_LIMIT = 8000;
 
+    /**
+     * 检索式降级说明(固定文案)。跨书调用方(S4)检索式是设计而非降级,
+     * 以此常量识别并剔除该段、仅保留断尾说明(见 ChatService#stripRetrievalDegradeNote)。
+     */
+    public static final String RETRIEVAL_DEGRADE_NOTE = "目标章超出上下文预算,已降级为检索式上下文";
+
     /** 装配模式:书内容槽的最终形态。 */
     public enum Mode {
         /** 整书装入 */
@@ -98,7 +104,7 @@ public final class BudgetCalculator {
         } else if (input.retrievalAvailable()) {
             mode = Mode.RETRIEVAL; // M4 翻真:检索式装配由调用方按此模式执行
             bookTokens = 0;
-            degradeNote = "目标章超出上下文预算,已降级为检索式上下文";
+            degradeNote = RETRIEVAL_DEGRADE_NOTE;
         } else {
             return insufficient(limit, messages.size());
         }

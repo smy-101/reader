@@ -1,11 +1,13 @@
 import {useCallback, useEffect, useRef, useState} from 'react'
-import type {AskInput, ChapterSummary, ChatMessage, ChatRef, ChatSession, Citation} from '@reader/api-client'
+import type {AskEvents, AskInput, ChapterSummary, ChatRef} from '@reader/api-client'
 import {api} from '../client'
 import type {FoliateView, RelocateDetail} from '../reader/foliate-types'
 import {jumpToCitation} from '../reader/locate'
 import {ChatComposer} from './chat/ChatComposer'
 import {MessageBubble} from './chat/MessageBubble'
-import {citationsToRefs, CitationBar} from './chat/CitationBar'
+import {CitationBar} from './chat/CitationBar'
+import {SessionList} from './chat/SessionList'
+import {useChatPanel, type ChatPanelAsk} from './chat/useChatPanel'
 
 /**
  * AI 伴读面板(M3-04,S2;M4-05,S3;S4 抽出共用件):该书会话列表 + 消息流(含引用展示)
@@ -14,7 +16,7 @@ import {citationsToRefs, CitationBar} from './chat/CitationBar'
  * 对应 foliate sections[index].id 与后端 chapter.href 后缀匹配),显式点名章用显式值。
  * S3 定位原文(M4-05):该书嵌入完成才显示「定位原文」入口(FR-403);检索引用随
  * meta 事件在流式开始前即可见,点击跳转到对应章节并尝试以摘录文字定位(未命中停章首)。
- * 消息流/引用条/输入行为共用件(chat/*),跨书面板(GlobalAiPanel)同构复用。
+ * 状态机与会话列表为共用件(chat/useChatPanel + SessionList),跨书面板同构复用。
  */
 
 /** S1 预填:划选后从菜单“问 AI”带进面板的选中文字(05 交付)。 */
@@ -31,19 +33,7 @@ export function AiPanel({bookId, view, relocateRef, pendingSelection, onClearPen
     onClearPending: () => void
     onClose: () => void
 }) {
-    const [sessions, setSessions] = useState<ChatSession[]>([])
-    const [activeId, setActiveId] = useState<number | null>(null)
-    const [messages, setMessages] = useState<ChatMessage[]>([])
-    const [input, setInput] = useState('')
-    const [streamText, setStreamText] = useState<string | null>(null)
-    /** 流式文本镜像(updater 外读,避免 setState 嵌套副作用;StrictMode 下 updater 双调会重复落消息) */
-    const streamTextRef = useRef('')
-    const [askError, setAskError] = useState<string | null>(null)
-    const [note, setNote] = useState<string | null>(null)
-    const [renaming, setRenaming] = useState<number | null>(null)
-    const [renameText, setRenameText] = useState('')
     const [, setChapters] = useState<ChapterSummary[]>([])
-    const messagesEndRef = useRef<HTMLDivElement | null>(null)
     /** 章节表加载 promise(发送时 await 它,避免目标章映射在加载完成前落空) */
     const chaptersReadyRef = useRef<Promise<ChapterSummary[]> | null>(null)
 
@@ -52,53 +42,31 @@ export function AiPanel({bookId, view, relocateRef, pendingSelection, onClearPen
     const [embeddingReady, setEmbeddingReady] = useState<boolean | null>(null)
     /** S3 提问模式:开启后发送显式检索式提问 */
     const [retrievalMode, setRetrievalMode] = useState(false)
-    /** 本次流式的检索引用(随 meta 下发;流式开始前即可渲染) */
-    const [liveCitations, setLiveCitations] = useState<Citation[] | null>(null)
-    /** meta 引用镜像(onDone 落助手消息 refs,与后端落库同形) */
-    const liveCitationsRef = useRef<Citation[] | null>(null)
 
-    const activeSession = sessions.find(s => s.id === activeId) ?? null
-    const streaming = streamText !== null
+    const panel = useChatPanel({
+        listSessions: () => api.listSessions(bookId),
+        loadSessionMessages: api.listSessionMessages,
+        renameSession: api.renameSession,
+        deleteSession: api.deleteSession,
+        newSessionBookId: bookId,
+    })
+    const {
+        sessions, activeId, activeSession, messages, input, setInput,
+        streaming, streamText, liveCitations, askError, note,
+        renaming, setRenaming, renameText, setRenameText, messagesEndRef,
+        bootstrap, send, startNewSession, confirmRename, removeSession, openSession,
+    } = panel
 
-    const loadMessages = useCallback(async (sessionId: number) => {
-        try {
-            setMessages(await api.listSessionMessages(sessionId))
-        } catch (e) {
-            setAskError(e instanceof Error ? e.message : String(e))
-        }
-    }, [])
-
-    // 打开面板:会话列表 + 最近活跃会话的消息 + 章节表;StrictMode 双调用下只引导一次
-    // (迟到的回调会覆盖交互后的状态,如刚改完的会话名)
-    const bootstrappedRef = useRef(false)
+    // 打开面板:共用引导 + 章节表(目标章映射用)
     useEffect(() => {
-        if (bootstrappedRef.current) return
-        bootstrappedRef.current = true
-        void (async () => {
-            try {
-                const list = await api.listSessions(bookId)
-                setSessions(list)
-                const first = list[0]
-                if (first) {
-                    setActiveId(first.id)
-                    await loadMessages(first.id)
-                }
-            } catch (e) {
-                setAskError(e instanceof Error ? e.message : String(e))
-            }
-            chaptersReadyRef.current = api.listChapters(bookId)
-                .then(list => {
-                    setChapters(list)
-                    return list
-                })
-                .catch(() => [] as ChapterSummary[])
-        })()
-    }, [bookId, loadMessages])
-
-    // 流式期间与消息变化时滚动到底
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({block: 'nearest'})
-    }, [messages, streamText])
+        void bootstrap()
+        chaptersReadyRef.current = api.listChapters(bookId)
+            .then(list => {
+                setChapters(list)
+                return list
+            })
+            .catch(() => [] as ChapterSummary[])
+    }, [bookId, bootstrap])
 
     // S3 前置裁决:embedding 已配置且该书嵌入完成(当前模型)才显示「定位原文」;
     // 嵌入进行中每 2s 重查,完成即亮(未配置/未嵌入/模型已换 → 隐藏不报错,FR-403)
@@ -142,11 +110,8 @@ export function AiPanel({bookId, view, relocateRef, pendingSelection, onClearPen
         return chapter ? {chapterId: chapter.id, cfi: detail.cfi ?? undefined} : null
     }, [view, relocateRef])
 
-    async function send() {
-        const content = input.trim()
-        if (!content || streamText !== null) return
-        setAskError(null)
-        setNote(null)
+    /** 面板差异注入:目标章/S1/S3 装配 + 书级端点调用。 */
+    async function prepareAsk(): Promise<ChatPanelAsk> {
         // 章节表就绪后再映射目标章(打开面板后立刻提问也不丢章)
         const chaptersNow = await (chaptersReadyRef.current ?? Promise.resolve([] as ChapterSummary[]))
         const target = currentTargetChapter(chaptersNow)
@@ -154,7 +119,7 @@ export function AiPanel({bookId, view, relocateRef, pendingSelection, onClearPen
         // S3 检索式提问(带选中文字时 S1 优先级最高,不受影响)
         const retrieval = retrievalMode && !selection
         const askInput: AskInput = {
-            content,
+            content: input.trim(),
             sessionId: activeId,
             chapterId: target?.chapterId ?? null,
             cfi: target?.cfi ?? null,
@@ -162,120 +127,20 @@ export function AiPanel({bookId, view, relocateRef, pendingSelection, onClearPen
             retrieval,
         }
 
-        // 乐观 UI:先显示本条提问(引用一并展示),meta 落定后修正 id
         const optimisticRefs: ChatRef[] = []
-        if (selection) optimisticRefs.push({type: 'selection', text: selection.text, cfi: selection.cfi ?? undefined})
+        if (selection) {
+            optimisticRefs.push({type: 'selection', text: selection.text, cfi: selection.cfi ?? undefined})
+        }
         if (target) {
             const ch = chaptersNow.find(c => c.id === target.chapterId)
             optimisticRefs.push({type: 'chapter', chapterId: target.chapterId, chapterTitle: ch?.title ?? null, seq: ch?.seq})
         }
-        const tempId = -Date.now()
-        setMessages(prev => [...prev, {
-            id: tempId, sessionId: activeId ?? 0, role: 'user' as const,
-            content, refs: optimisticRefs?.length ? optimisticRefs : null, createdAt: '',
-        }])
-        setInput('')
         onClearPending()
-        streamTextRef.current = ''
-        setStreamText('')
-        setLiveCitations(retrieval ? [] : null) // S3:先挂空引用条(流式开始前占位)
-        liveCitationsRef.current = null
-
-        try {
-            await api.askStream(bookId, askInput, {
-                onMeta: meta => {
-                    setMessages(prev => prev.map(m => (m.id === tempId ? {...m, id: meta.userMessageId} : m)))
-                    setActiveId(meta.sessionId)
-                    liveCitationsRef.current = meta.citations ?? null
-                    setLiveCitations(meta.citations ?? null)
-                    // 新消息刷新活跃度:该会话置顶,面板次序与"最近活跃"口径一致
-                    setSessions(prev => prev.some(s => s.id === meta.sessionId)
-                        ? [
-                            {...prev.find(s => s.id === meta.sessionId)!, title: meta.sessionTitle},
-                            ...prev.filter(s => s.id !== meta.sessionId),
-                        ]
-                        : [{id: meta.sessionId, bookId, title: meta.sessionTitle, createdAt: '', updatedAt: ''}, ...prev])
-                },
-                onDelta: text => {
-                    streamTextRef.current += text
-                    setStreamText(streamTextRef.current)
-                },
-                onDone: done => {
-                    const content = streamTextRef.current
-                    if (content) {
-                        // S3 检索引用随助手消息展示(与后端落库 refs 同形,刷新后仍在)
-                        setMessages(msgs => [...msgs, {
-                            id: done.assistantMessageId, sessionId: activeId ?? 0,
-                            role: 'assistant' as const, content, refs: citationsToRefs(liveCitationsRef.current), createdAt: '',
-                        }])
-                    }
-                    setLiveCitations(null)
-                    setStreamText(null)
-                    if (done.note) setNote(done.note)
-                },
-                onError: message => {
-                    const partial = streamTextRef.current
-                    if (partial) {
-                        // 中断:已到内容照常展示(与后端落库口径一致)
-                        setMessages(msgs => [...msgs, {
-                            id: -Date.now(), sessionId: activeId ?? 0,
-                            role: 'assistant' as const, content: partial, refs: null, createdAt: '',
-                        }])
-                    }
-                    setStreamText(null)
-                    setAskError(message)
-                },
-            })
-        } catch (e) {
-            setStreamText(null)
-            setLiveCitations(null)
-            setAskError(e instanceof Error ? e.message : String(e))
+        return {
+            invoke: (events: AskEvents) => api.askStream(bookId, askInput, events),
+            optimisticRefs: optimisticRefs.length ? optimisticRefs : null,
+            citationsExpected: retrieval,
         }
-    }
-
-    async function startNewSession() {
-        setActiveId(null)
-        setMessages([])
-        setAskError(null)
-        setNote(null)
-        setLiveCitations(null)
-    }
-
-    async function confirmRename(sessionId: number) {
-        const title = renameText.trim()
-        if (!title) return
-        try {
-            const updated = await api.renameSession(sessionId, title)
-            setSessions(prev => prev.map(s => (s.id === sessionId ? updated : s)))
-        } catch (e) {
-            setAskError(e instanceof Error ? e.message : String(e))
-        } finally {
-            setRenaming(null)
-        }
-    }
-
-    async function removeSession(sessionId: number) {
-        try {
-            await api.deleteSession(sessionId)
-            const rest = sessions.filter(s => s.id !== sessionId)
-            setSessions(rest)
-            if (activeId === sessionId) {
-                setActiveId(rest[0]?.id ?? null)
-                if (rest[0]) await loadMessages(rest[0].id)
-                else setMessages([])
-            }
-        } catch (e) {
-            setAskError(e instanceof Error ? e.message : String(e))
-        }
-    }
-
-    async function openSession(sessionId: number) {
-        if (streaming || sessionId === activeId) return
-        setActiveId(sessionId)
-        setAskError(null)
-        setNote(null)
-        setLiveCitations(null)
-        await loadMessages(sessionId)
     }
 
     /** 点击引用跳转:到对应章节 + 尝试以摘录文字定位(命中滚动到命中处,未命中停章首)。 */
@@ -289,39 +154,24 @@ export function AiPanel({bookId, view, relocateRef, pendingSelection, onClearPen
         <aside className="ai-panel" data-testid="ai-panel">
             <div className="ai-panel-header">
                 <h2>AI 伴读</h2>
-                <button onClick={() => void startNewSession()} data-testid="ai-new-session">新会话</button>
+                <button onClick={startNewSession} data-testid="ai-new-session">新会话</button>
                 <button onClick={onClose} data-testid="ai-panel-close">关闭</button>
             </div>
 
-            <div className="ai-sessions" data-testid="ai-session-list">
-                {sessions.map(s => (
-                    <div key={s.id}
-                         className={`ai-session-item ${s.id === activeId ? 'active' : ''}`}
-                         data-testid="ai-session-item">
-                        {renaming === s.id ? (
-                            <>
-                                <input autoFocus value={renameText}
-                                       onChange={e => setRenameText(e.target.value)}
-                                       onKeyDown={e => e.key === 'Enter' && void confirmRename(s.id)}
-                                       data-testid="ai-rename-input"/>
-                                <button onClick={() => void confirmRename(s.id)} data-testid="ai-rename-confirm">确定</button>
-                                <button onClick={() => setRenaming(null)}>取消</button>
-                            </>
-                        ) : (
-                            <>
-                                <button className="ai-session-title" onClick={() => void openSession(s.id)}
-                                        data-testid="ai-session-title">{s.title}</button>
-                                <button onClick={() => {
-                                    setRenaming(s.id)
-                                    setRenameText(s.title)
-                                }} data-testid="ai-rename-button">重命名</button>
-                                <button onClick={() => void removeSession(s.id)} data-testid="ai-delete-session">删除</button>
-                            </>
-                        )}
-                    </div>
-                ))}
-                {sessions.length === 0 && <p className="hint">本书还没有会话;提问即创建。</p>}
-            </div>
+            <SessionList
+                sessions={sessions} activeId={activeId}
+                renaming={renaming} renameText={renameText}
+                onRenameText={setRenameText}
+                onConfirmRename={confirmRename}
+                onStartRename={s => {
+                    setRenaming(s.id)
+                    setRenameText(s.title)
+                }}
+                onCancelRename={() => setRenaming(null)}
+                onOpen={openSession}
+                onRemove={removeSession}
+                emptyHint="本书还没有会话;提问即创建。"
+                testPrefix="ai"/>
 
             <div className="ai-messages" data-testid="ai-messages">
                 {messages.map(m => <MessageBubble key={m.id} message={m} onJump={jump}/>)}
@@ -353,7 +203,7 @@ export function AiPanel({bookId, view, relocateRef, pendingSelection, onClearPen
                 <ChatComposer
                     value={input}
                     onChange={setInput}
-                    onSend={send}
+                    onSend={() => send(prepareAsk)}
                     streaming={streaming}
                     placeholder={retrievalMode
                         ? '问“作者在哪讨论过…”(检索原文定位)'

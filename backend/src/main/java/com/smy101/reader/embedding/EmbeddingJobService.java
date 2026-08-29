@@ -28,6 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
 /**
  * 嵌入任务编排(M4-02,FR-302 基建):上传后自动建任务、手动触发一入口多态
@@ -150,8 +151,8 @@ public class EmbeddingJobService {
     }
 
     /**
-     * 全库就绪书集合(S4 跨书检索范围,D-36):最新任务 done 且模型与当前 embedding 配置一致。
-     * 与 S3 单书"嵌入完成"同一裁决口径的集合化;未嵌入/进行中/失败/模型已换均静默排除。
+     * 全库就绪书集合(S4 跨书检索范围,D-36):与 S3 单书"嵌入完成"同一裁决口径的集合化;
+     * 未嵌入/进行中/失败/模型已换均静默排除。
      */
     public Set<Long> readyBookIds() {
         String currentModel = currentModel();
@@ -159,10 +160,9 @@ public class EmbeddingJobService {
             return Set.of();
         }
         return jobMapper.selectLatestPerBook().stream()
-                .filter(job -> EmbeddingJob.STATUS_DONE.equals(job.getStatus())
-                        && currentModel.equals(job.getModel()))
+                .filter(job -> isReady(job, currentModel))
                 .map(EmbeddingJob::getBookId)
-                .collect(java.util.stream.Collectors.toSet());
+                .collect(Collectors.toSet());
     }
 
     /**
@@ -172,20 +172,25 @@ public class EmbeddingJobService {
     public Map<Long, EmbeddingDtos.EmbeddingSummary> embeddingSummaries() {
         String currentModel = currentModel();
         Map<Long, EmbeddingJob> latest = jobMapper.selectLatestPerBook().stream()
-                .collect(java.util.stream.Collectors.toMap(EmbeddingJob::getBookId, job -> job));
+                .collect(Collectors.toMap(EmbeddingJob::getBookId, job -> job));
         return bookMapper.selectList(null).stream()
-                .collect(java.util.stream.Collectors.toMap(
+                .collect(Collectors.toMap(
                         Book::getId,
                         book -> {
                             EmbeddingJob job = latest.get(book.getId());
-                            boolean ready = currentModel != null && job != null
-                                    && EmbeddingJob.STATUS_DONE.equals(job.getStatus())
-                                    && currentModel.equals(job.getModel());
                             return new EmbeddingDtos.EmbeddingSummary(
                                     job == null ? "none" : job.getStatus(),
                                     job == null ? null : job.getModel(),
-                                    ready);
+                                    job != null && isReady(job, currentModel));
                         }));
+    }
+
+    /** 就绪裁决(单一口径,S3 单书与 S4 全库同源):最新任务 done 且模型与当前 embedding 配置一致;
+     * currentModel 空 = 未配置(未就绪)。 */
+    public static boolean isReady(EmbeddingJob job, String currentModel) {
+        return currentModel != null
+                && EmbeddingJob.STATUS_DONE.equals(job.getStatus())
+                && currentModel.equals(job.getModel());
     }
 
     // ---- 内部:任务创建与执行 ----
