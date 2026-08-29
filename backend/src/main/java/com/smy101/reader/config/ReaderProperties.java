@@ -39,5 +39,11 @@ public class ReaderProperties {
 
         /** 流式对话上游空闲超时毫秒数(相邻数据块最大间隔;超时断流,FR-303 不悬挂) */
         private long streamIdleTimeoutMs = 60_000;
+
+        /** embeddings 单批条数上限(分批有界,M4-02:大书不打爆上游) */
+        private int embeddingBatchSize = 16;
+
+        /** embeddings 单批请求整体超时毫秒数 */
+        private long embeddingRequestTimeoutMs = 120_000;
     }
 }

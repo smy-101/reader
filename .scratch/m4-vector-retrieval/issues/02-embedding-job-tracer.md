@@ -6,13 +6,13 @@
 
 **Status:** ready-for-agent
 
-- [ ] 已配置 embedding:上传成功后自动创建嵌入任务,状态端点可见 pending/running(进度推进)/done;上传响应不等嵌入,嵌入失败不影响上传结果与阅读
-- [ ] 向量块行落库:条数=切块数、book/chapter 归属正确、seq 有序、token_count 齐、同书维度一致
-- [ ] 未配置 embedding:上传不建任务,状态端点明示未嵌入
-- [ ] 上游 embeddings 失败/超时:任务 failed + 可读中文 error;触发重试 → 从头重跑,旧块清净后重新入库,终态 done
-- [ ] 换模型触发:清旧块全量重嵌入,块维度随新模型变化可断言;同模型且 done:触发幂等返回当前状态
-- [ ] 存量书(未配置期上传)手动触发首次嵌入可达 done
-- [ ] embeddings 请求发往 embedding 独立 base_url/api_key(独立配置时;留空跟随 chat,D-28);请求分批有界,大书不打爆上游
-- [ ] 同书任务串行:同一本书不会出现两个并发执行的任务
-- [ ] 两表经 Flyway 迁移落地、外键 ON DELETE CASCADE;维度与检索策略 ADR 落档
-- [ ] 新端点不带/带错 token 一律 401;错误响应为可读中文文案
+- [x] 已配置 embedding:上传成功后自动创建嵌入任务,状态端点可见 pending/running(进度推进)/done;上传响应不等嵌入,嵌入失败不影响上传结果与阅读
+- [x] 向量块行落库:条数=切块数、book/chapter 归属正确、seq 有序、token_count 齐、同书维度一致
+- [x] 未配置 embedding:上传不建任务,状态端点明示未嵌入
+- [x] 上游 embeddings 失败/超时:任务 failed + 可读中文 error;触发重试 → 从头重跑,旧块清净后重新入库,终态 done
+- [x] 换模型触发:清旧块全量重嵌入,块维度随新模型变化可断言;同模型且 done:触发幂等返回当前状态
+- [x] 存量书(未配置期上传)手动触发首次嵌入可达 done
+- [x] embeddings 请求发往 embedding 独立 base_url/api_key(独立配置时;留空跟随 chat,D-28);请求分批有界,大书不打爆上游
+- [x] 同书任务串行:同一本书不会出现两个并发执行的任务
+- [x] 两表经 Flyway 迁移落地、外键 ON DELETE CASCADE;维度与检索策略 ADR 落档
+- [x] 新端点不带/带错 token 一律 401;错误响应为可读中文文案

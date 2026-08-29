@@ -136,14 +136,17 @@ export interface ChatSession {
     updatedAt: string;
 }
 
-/** 引用来源(refs);首版两种:选中文字与章节。 */
+/** 引用来源(refs);首版三种:选中文字、章节与检索块(M4)。 */
 export interface ChatRef {
-    type: 'selection' | 'chapter';
+    type: 'selection' | 'chapter' | 'retrieval';
     text?: string;
     cfi?: string;
     chapterId?: number;
     chapterTitle?: string | null;
     seq?: number;
+    /** retrieval 专用:原文摘录 */
+    excerpt?: string;
+    chunkSeq?: number;
 }
 
 export interface ChatMessage {
@@ -155,19 +158,32 @@ export interface ChatMessage {
     createdAt: string;
 }
 
-/** 书级提问(S1 与 S2 同一通路,D-32:带 selection 即 S1)。 */
+/** 书级提问(S1 与 S2 同一通路,D-32:带 selection 即 S1;retrieval=true 即 S3,M4)。 */
 export interface AskInput {
     content: string;
     sessionId?: number | null;
     chapterId?: number | null;
     cfi?: string | null;
     selection?: { text: string; cfi?: string | null } | null;
+    /** S3 定位原文:显式检索式提问(前置不满足时 4xx 可读文案) */
+    retrieval?: boolean;
 }
 
 export interface AskMeta {
     sessionId: number;
     sessionTitle: string;
     userMessageId: number;
+    /** S3:检索引用随开场元数据事件下发(流式开始前即可渲染) */
+    citations?: Citation[] | null;
+}
+
+/** 检索引用(章节标识 + 标题 + 原文摘录;S3 跳转用)。 */
+export interface Citation {
+    chapterId: number;
+    chapterTitle: string | null;
+    chapterSeq: number;
+    chunkSeq: number;
+    excerpt: string;
 }
 
 export interface AskDone {
@@ -181,6 +197,19 @@ export interface AskEvents {
     onDelta?: (text: string) => void;
     onDone?: (done: AskDone) => void;
     onError?: (message: string) => void;
+}
+
+// ---- 嵌入任务(M4) ----
+
+/** 嵌入状态:status ∈ none | pending | running | done | failed */
+export interface EmbeddingStatus {
+    bookId: number;
+    status: 'none' | 'pending' | 'running' | 'done' | 'failed';
+    model: string | null;
+    chunkDone: number | null;
+    chunkTotal: number | null;
+    error: string | null;
+    updatedAt: string | null;
 }
 
 // ---- 错误 ----
@@ -378,6 +407,17 @@ export function createClient({baseUrl = '', token, sameOriginBlocked}: ClientOpt
         /** 某书会话列表,按最近活跃排序。 */
         listSessions(bookId: number): Promise<ChatSession[]> {
             return requestList<ChatSession>(`/api/books/${bookId}/sessions`)
+        },
+
+        /** 某书嵌入状态(最新任务);未建任务返回 none。 */
+        getEmbeddingStatus(bookId: number): Promise<EmbeddingStatus> {
+            return request<EmbeddingStatus>(`/api/books/${bookId}/embedding`)
+        },
+
+        /** 触发嵌入(一入口多态:首次嵌入 / 失败重试 / 换模型全量重嵌入;
+         * pending/running 幂等返回当前状态;未配置 embedding 拋 4xx 可读文案)。 */
+        triggerEmbedding(bookId: number): Promise<EmbeddingStatus> {
+            return request<EmbeddingStatus>(`/api/books/${bookId}/embedding/trigger`, {method: 'POST'})
         },
 
         /** 会话全部消息(含 refs),打开会话一次拿齐。 */

@@ -7,6 +7,7 @@ import com.smy101.reader.book.dto.UploadBookResponse;
 import com.smy101.reader.book.epub.EpubParser;
 import com.smy101.reader.book.epub.ParsedEpub;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -36,6 +37,7 @@ public class BookService {
     private final EpubParser epubParser;
     private final FileStorage fileStorage;
     private final TransactionTemplate transactionTemplate;
+    private final ApplicationEventPublisher events;
 
     public List<Book> listAll() {
         return bookMapper.selectList(new LambdaQueryWrapper<Book>()
@@ -121,6 +123,9 @@ public class BookService {
             }
             throw e;
         }
+        // 新书入库完成:发事件(嵌入任务域据此自动建任务,M4-02;同步解析口径 D-41 不变,
+        // 上传响应不等嵌入,嵌入失败也不影响上传结果)
+        events.publishEvent(new BookUploadedEvent(book.getId()));
         return toResponse(book, false);
     }
 

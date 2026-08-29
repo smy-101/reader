@@ -5,6 +5,7 @@ import com.smy101.reader.book.epub.EpubParseException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -48,6 +49,13 @@ public class ApiExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> badArgument(IllegalArgumentException e) {
         return badRequest(e.getMessage());
+    }
+
+    /** 接口不存在(如后端版本落后于前端):404 可读文案,不冒充 500。 */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Map<String, String>> noResource(NoResourceFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", "接口不存在(" + e.getResourcePath() + "):请确认后端已更新并重启"));
     }
 
     @ExceptionHandler(Exception.class)

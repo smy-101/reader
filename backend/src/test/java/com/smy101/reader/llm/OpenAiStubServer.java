@@ -49,6 +49,9 @@ public class OpenAiStubServer implements AutoCloseable {
             "{\"choices\":[{\"delta\":{\"content\":\"这是 stub 回复\"}}]}\n" +
             "{\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n" +
             "[DONE]");
+    /** embeddings 行为:body == null 表示确定性生成(关键词→维度映射的袋向量) */
+    private volatile Behavior embeddingsBehavior = Behavior.of(200, null);
+    private volatile int embeddingDimension = 32;
 
     public OpenAiStubServer() {
         try {
@@ -93,6 +96,21 @@ public class OpenAiStubServer implements AutoCloseable {
 
     public void chat(int status, String bodyOrSse) {
         this.chatBehavior = Behavior.of(status, bodyOrSse);
+    }
+
+    /** embeddings 上游失败(非 2xx 可读错误)。 */
+    public void embeddings(int status, String jsonBody) {
+        this.embeddingsBehavior = Behavior.of(status, jsonBody);
+    }
+
+    /** embeddings 上游恢复成功(确定性向量)。 */
+    public void embeddingsOk() {
+        this.embeddingsBehavior = Behavior.of(200, null);
+    }
+
+    /** 确定性向量维度(默认 32;换模型重嵌入的维度变化断言用)。 */
+    public void setEmbeddingDimension(int dimension) {
+        this.embeddingDimension = dimension;
     }
 
     public void chatStream(List<String> deltas) {
@@ -150,10 +168,15 @@ public class OpenAiStubServer implements AutoCloseable {
             Behavior behavior = switch (path) {
                 case "/v1/models" -> modelsBehavior;
                 case "/v1/chat/completions" -> chatBehavior;
+                case "/v1/embeddings" -> embeddingsBehavior;
                 default -> null; // 未如路由 → 404(测错前缀的 Base URL)
             };
             if (behavior == null) {
                 respond(exchange, 404, "{\"error\":{\"message\":\"Unknown path\"}}");
+                return;
+            }
+            if ("/v1/embeddings".equals(path) && behavior.status() == 200 && behavior.body() == null) {
+                respond(exchange, 200, deterministicEmbeddings(body));
                 return;
             }
             if (behavior.hang()) {
@@ -232,5 +255,56 @@ public class OpenAiStubServer implements AutoCloseable {
         } catch (IOException e) {
             throw new IllegalStateException("无法分配测试端口", e);
         }
+    }
+
+    /**
+     * 确定性 embeddings(体):每个非空白码点落到固定维度槽(关键词→维度映射的袋向量),
+     * 同文本同维度向量恒定——检索排序可断言;维度可经 {@link #setEmbeddingDimension} 换模型时改变。
+     */
+    private String deterministicEmbeddings(String requestBody) throws IOException {
+        com.fasterxml.jackson.databind.JsonNode root = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(requestBody);
+        com.fasterxml.jackson.databind.JsonNode input = root.path("input");
+        List<String> texts = new ArrayList<>();
+        if (input.isArray()) {
+            input.forEach(t -> texts.add(t.asText()));
+        } else {
+            texts.add(input.asText(""));
+        }
+        int dim = embeddingDimension;
+        StringBuilder json = new StringBuilder("{\"object\":\"list\",\"model\":\"")
+                .append(root.path("model").asText("stub-embed"))
+                .append("\",\"data\":[");
+        for (int i = 0; i < texts.size(); i++) {
+            float[] vector = bagOfCodePoints(texts.get(i), dim);
+            if (i > 0) {
+                json.append(',');
+            }
+            json.append("{\"object\":\"embedding\",\"index\":").append(i).append(",\"embedding\":[");
+            for (int d = 0; d < dim; d++) {
+                if (d > 0) {
+                    json.append(',');
+                }
+                json.append(java.math.BigDecimal.valueOf(vector[d]).stripTrailingZeros().toPlainString());
+            }
+            json.append("]}");
+        }
+        json.append("],\"usage\":{\"prompt_tokens\":0,\"total_tokens\":0}}");
+        return json.toString();
+    }
+
+    private static float[] bagOfCodePoints(String text, int dim) {
+        float[] vector = new float[dim];
+        for (int i = 0; i < text.length(); ) {
+            int cp = text.codePointAt(i);
+            i += Character.charCount(cp);
+            if (Character.isWhitespace(cp)) {
+                continue;
+            }
+            int folded = Character.toLowerCase(cp);
+            int slot = Math.floorMod(folded * 31 + 7, dim);
+            vector[slot] += 1.0f;
+        }
+        return vector;
     }
 }

@@ -16,6 +16,11 @@ final class LlmUrls {
         return trimTrailingSlash(baseUrl) + "/chat/completions";
     }
 
+    /** {base}/embeddings(向量化,M4-02)。 */
+    static String embeddingsUrl(String baseUrl) {
+        return trimTrailingSlash(baseUrl) + "/embeddings";
+    }
+
     private static String trimTrailingSlash(String baseUrl) {
         String trimmed = baseUrl.strip();
         while (trimmed.endsWith("/")) {
