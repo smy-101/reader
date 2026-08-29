@@ -647,3 +647,43 @@ button {
     border: 1px solid #d0d7de;
     border-radius: 8px;
 }
+
+/* ---- 删书(M3-06,FR-104) ---- */
+
+.book-card-wrap {
+    position: relative;
+}
+
+.book-card-wrap .book-delete {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    padding: 2px 8px;
+    font-size: 12px;
+    border-radius: 6px;
+    border: 1px solid #8884;
+    background: #fff9;
+    color: #57606a;
+    opacity: .75;
+}
+
+[data-theme='dark'] .book-card-wrap .book-delete, .book-card-wrap .book-delete:hover {
+    opacity: 1;
+}
+
+.book-card-wrap .book-delete:hover {
+    color: #cf222e;
+    border-color: #cf222e66;
+}
+
+.delete-scope {
+    margin: 0 0 14px;
+    padding-left: 20px;
+    font-size: 14px;
+    color: #57606a;
+}
+
+.dialog-actions .danger {
+    color: #cf222e;
+    border-color: #cf222e66;
+}

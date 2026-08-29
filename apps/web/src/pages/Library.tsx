@@ -3,6 +3,7 @@ import type {BookListItem} from '@reader/api-client'
 import {api} from '../client'
 import {BookCard} from '../components/BookCard'
 import {ConnectionSettings} from '../components/ConnectionSettings'
+import {DeleteBookDialog} from '../components/DeleteBookDialog'
 import {ModelSettingsPanel} from '../components/ModelSettingsPanel'
 import {UploadPanel, type UploadResult} from '../components/UploadPanel'
 
@@ -14,6 +15,7 @@ export function Library({onOpen}: { onOpen: (bookId: number) => void }) {
     const [filter, setFilter] = useState('')
     const [settingsOpen, setSettingsOpen] = useState(false)
     const [modelSettingsOpen, setModelSettingsOpen] = useState(false)
+    const [pendingDelete, setPendingDelete] = useState<BookListItem | null>(null)
 
     const refresh = useCallback(async () => {
         setLoading(true)
@@ -93,7 +95,12 @@ export function Library({onOpen}: { onOpen: (bookId: number) => void }) {
 
             <section className="book-grid" aria-label="书籍列表">
                 {filtered.map(book => (
-                    <BookCard key={book.id} book={book} onOpen={() => onOpen(book.id)}/>
+                    <BookCard
+                        key={book.id}
+                        book={book}
+                        onOpen={() => onOpen(book.id)}
+                        onDelete={() => setPendingDelete(book)}
+                    />
                 ))}
             </section>
             {!loading && books.length > 0 && filtered.length === 0 && (
@@ -102,6 +109,16 @@ export function Library({onOpen}: { onOpen: (bookId: number) => void }) {
 
             {settingsOpen && <ConnectionSettings onClose={() => setSettingsOpen(false)}/>}
             {modelSettingsOpen && <ModelSettingsPanel onClose={() => setModelSettingsOpen(false)}/>}
+            {pendingDelete && (
+                <DeleteBookDialog
+                    book={pendingDelete}
+                    onDone={() => {
+                        setPendingDelete(null)
+                        void refresh() // 删除后书库即时移出(FR-104)
+                    }}
+                    onCancel={() => setPendingDelete(null)}
+                />
+            )}
         </main>
     )
 }

@@ -12,6 +12,7 @@ import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -92,5 +93,13 @@ public class BookController {
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         ContentDisposition.attachment().filename("book-" + id + ".epub").build().toString())
                 .body(new InputStreamResource(in));
+    }
+
+    /** 删除书籍(FR-104):完整级联——磁盘书源文件与封面 + 划线/进度/该书会话(外键级联);
+     * 前端确认弹窗明示级联范围;向量级联为 M4 在同一流程上的增量。 */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable long id) {
+        bookService.deleteBook(id);
+        return ResponseEntity.noContent().build();
     }
 }

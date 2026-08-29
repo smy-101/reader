@@ -124,6 +124,27 @@ public class BookService {
         return toResponse(book, false);
     }
 
+    /**
+     * 删除书籍(FR-104 完整级联):先删 DB 行(外键级联带走章节/划线/进度/该书会话→消息,
+     * book_id 为空的跨书会话不受影响,D-33),再清磁盘书源文件与封面(失败至多残留同名
+     * hash 文件,无害;反之先删文件会出现有书无文件)。
+     * <p>
+     * M4 挂点:向量块清理预留在本方法内(DB 删除之后)追加——删书流程单点,不散落。
+     */
+    public void deleteBook(long id) {
+        Book book = requireBook(id);
+        bookMapper.deleteById(id);
+        // M4:向量块清理(embedding 任务与向量表落地后)在此追加,同流程单点挂接
+        try {
+            fileStorage.deleteBookFile(book.getFileHash());
+            if (book.getCoverPath() != null) {
+                fileStorage.delete(book.getCoverPath());
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("书源文件清理失败", e);
+        }
+    }
+
     // ---- 内部 ----
 
     private Book requireBook(long id) {

@@ -36,6 +36,16 @@ public class FileStorage {
         return Files.newInputStream(root.resolve(BOOKS_DIR + "/" + fileHash + ".epub"));
     }
 
+    /** 删书时清理书源文件(FR-104);不存在则忽略。 */
+    public void deleteBookFile(String fileHash) throws IOException {
+        Files.deleteIfExists(root.resolve(BOOKS_DIR + "/" + fileHash + ".epub"));
+    }
+
+    /** 删书时清理封面等相对路径文件(FR-104);不存在则忽略。 */
+    public void delete(String relativePath) throws IOException {
+        Files.deleteIfExists(root.resolve(relativePath));
+    }
+
     /** 保存封面,返回相对 root 的路径(covers/<hash>.<ext>)。 */
     public String saveCover(String fileHash, byte[] bytes, String extension) throws IOException {
         return write(COVERS_DIR + "/" + fileHash + "." + extension, bytes);

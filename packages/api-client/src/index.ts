@@ -277,6 +277,11 @@ export function createClient({baseUrl = '', token, sameOriginBlocked}: ClientOpt
             return request<UploadBookResponse>('/api/books', {method: 'POST', body: form})
         },
 
+        /** 删除书籍(FR-104):后端执行完整级联(文件/划线/进度/会话) */
+        deleteBook(bookId: number): Promise<void> {
+            return request<void>(`/api/books/${bookId}`, {method: 'DELETE'})
+        },
+
         /** 封面图(带 token 程序化拉取;objectURL 交给 <img>) */
         async fetchCover(coverUrl: string): Promise<Blob> {
             return request<Blob>(coverUrl)
