@@ -144,7 +144,8 @@ export interface ChatRef {
     chapterId?: number;
     chapterTitle?: string | null;
     seq?: number;
-    /** retrieval 专用:原文摘录 */
+    /** retrieval 专用:章序与原文摘录 */
+    chapterSeq?: number;
     excerpt?: string;
     chunkSeq?: number;
 }

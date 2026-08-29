@@ -123,7 +123,7 @@ function readBody(req: IncomingMessage): Promise<string> {
  * 确定性 embeddings(M4,与后端 OpenAiStubServer 同思路):每个非空白码点落到固定维度槽
  * (关键词→维度映射的袋向量),同文本同维度向量恒定——检索排序可断言,零外网依赖。
  */
-const EMBEDDING_DIM = 32
+const EMBEDDING_DIM = 256
 
 function deterministicEmbeddings(requestBody: string): unknown {
     const parsed = JSON.parse(requestBody) as { model?: string; input?: string[] | string }

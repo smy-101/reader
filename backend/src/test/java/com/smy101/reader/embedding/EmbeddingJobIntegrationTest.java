@@ -81,7 +81,7 @@ class EmbeddingJobIntegrationTest extends IntegrationTestBase {
         }
         assertThat(jdbc.queryForList(
                 "SELECT vector_dims(embedding) FROM document_chunk WHERE book_id = ?",
-                Integer.class, bookId)).containsOnly(32); // 同书维度一致(stub 默认 32)
+                Integer.class, bookId)).containsOnly(256); // 同书维度一致(stub 默认 256)
 
         // embeddings 请求分批有界:批大小 2,4 块 → 2 次请求,每次 input ≤ 2
         List<OpenAiStubServer.Received> requests = STUB.requests("/v1/embeddings");
@@ -137,7 +137,7 @@ class EmbeddingJobIntegrationTest extends IntegrationTestBase {
         awaitTerminal(bookId);
         assertThat(jdbc.queryForList(
                 "SELECT vector_dims(embedding) FROM document_chunk WHERE book_id = ?",
-                Integer.class, bookId)).containsOnly(32);
+                Integer.class, bookId)).containsOnly(256);
 
         // 换模型 + 换维度:触发 → 全量重嵌入,旧块清净
         STUB.setEmbeddingDimension(24);

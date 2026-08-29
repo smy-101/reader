@@ -51,7 +51,7 @@ public class OpenAiStubServer implements AutoCloseable {
             "[DONE]");
     /** embeddings 行为:body == null 表示确定性生成(关键词→维度映射的袋向量) */
     private volatile Behavior embeddingsBehavior = Behavior.of(200, null);
-    private volatile int embeddingDimension = 32;
+    private volatile int embeddingDimension = 256;
 
     public OpenAiStubServer() {
         try {
