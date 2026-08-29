@@ -80,6 +80,12 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
             res.end()
             return
         }
+        if (req.method === 'POST' && url === '/v1/embeddings') {
+            const body = await readBody(req)
+            res.writeHead(200, {'Content-Type': 'application/json'})
+            res.end(JSON.stringify(deterministicEmbeddings(body)))
+            return
+        }
         if (req.method === 'GET' && url === '/_last') {
             res.writeHead(200, {'Content-Type': 'application/json'})
             res.end(JSON.stringify({body: lastChatRequest?.body ?? null}))
@@ -111,6 +117,37 @@ function readBody(req: IncomingMessage): Promise<string> {
         req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
         req.on('error', reject)
     })
+}
+
+/**
+ * 确定性 embeddings(M4,与后端 OpenAiStubServer 同思路):每个非空白码点落到固定维度槽
+ * (关键词→维度映射的袋向量),同文本同维度向量恒定——检索排序可断言,零外网依赖。
+ */
+const EMBEDDING_DIM = 32
+
+function deterministicEmbeddings(requestBody: string): unknown {
+    const parsed = JSON.parse(requestBody) as { model?: string; input?: string[] | string }
+    const texts = Array.isArray(parsed.input) ? parsed.input : [parsed.input ?? '']
+    return {
+        object: 'list',
+        model: parsed.model ?? 'stub-embed',
+        data: texts.map((text, index) => ({
+            object: 'embedding',
+            index,
+            embedding: bagOfCodePoints(text, EMBEDDING_DIM),
+        })),
+        usage: {prompt_tokens: 0, total_tokens: 0},
+    }
+}
+
+function bagOfCodePoints(text: string, dim: number): number[] {
+    const vector = new Array<number>(dim).fill(0)
+    for (const ch of text) {
+        if (/\s/.test(ch)) continue
+        const cp = ch.toLowerCase().codePointAt(0) ?? 0
+        vector[Math.abs(cp * 31 + 7) % dim] += 1
+    }
+    return vector
 }
 
 function sleep(ms: number): Promise<void> {

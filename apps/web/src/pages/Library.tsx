@@ -16,6 +16,20 @@ export function Library({onOpen}: { onOpen: (bookId: number) => void }) {
     const [settingsOpen, setSettingsOpen] = useState(false)
     const [modelSettingsOpen, setModelSettingsOpen] = useState(false)
     const [pendingDelete, setPendingDelete] = useState<BookListItem | null>(null)
+    /** embedding 是否已配置:未配置时嵌入状态卡整体隐藏(FR-403) */
+    const [embeddingConfigured, setEmbeddingConfigured] = useState(false)
+
+    const refreshEmbeddingConfigured = useCallback(async () => {
+        try {
+            setEmbeddingConfigured((await api.getModelSettings()).embeddingModel != null)
+        } catch {
+            setEmbeddingConfigured(false) // 设置读不到按未配置处理(隐藏不报错)
+        }
+    }, [])
+
+    useEffect(() => {
+        void refreshEmbeddingConfigured()
+    }, [refreshEmbeddingConfigured])
 
     const refresh = useCallback(async () => {
         setLoading(true)
@@ -100,6 +114,7 @@ export function Library({onOpen}: { onOpen: (bookId: number) => void }) {
                         book={book}
                         onOpen={() => onOpen(book.id)}
                         onDelete={() => setPendingDelete(book)}
+                        showEmbedding={embeddingConfigured}
                     />
                 ))}
             </section>
@@ -108,7 +123,10 @@ export function Library({onOpen}: { onOpen: (bookId: number) => void }) {
             )}
 
             {settingsOpen && <ConnectionSettings onClose={() => setSettingsOpen(false)}/>}
-            {modelSettingsOpen && <ModelSettingsPanel onClose={() => setModelSettingsOpen(false)}/>}
+            {modelSettingsOpen && <ModelSettingsPanel onClose={() => {
+                setModelSettingsOpen(false)
+                void refreshEmbeddingConfigured() // 配置变化 → 状态卡显隐随之更新(FR-403)
+            }}/>}
             {pendingDelete && (
                 <DeleteBookDialog
                     book={pendingDelete}

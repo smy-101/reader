@@ -94,7 +94,7 @@ export async function resetBackend() {
     execFileSync('docker', [
         'exec', PG_CONTAINER,
         'psql', '-U', 'reader_app', '-d', 'reader_e2e',
-        '-c', 'TRUNCATE chat_message, chat_session, highlight, reading_progress, chapter, book, model_settings RESTART IDENTITY CASCADE',
+        '-c', 'TRUNCATE chat_message, chat_session, highlight, reading_progress, chapter, book, document_chunk, embedding_job, model_settings RESTART IDENTITY CASCADE',
     ], {stdio: 'ignore'})
     await stubLlmReset() // 跨进程清 stub 记录(经 HTTP)
 }
