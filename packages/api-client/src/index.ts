@@ -15,6 +15,15 @@ export interface BookListItem {
     coverUrl: string | null;
     /** 0-100;无进度为 null */
     progressPercent: number | null;
+    /** 嵌入就绪摘要(S4,US 25):最新任务状态 + 是否就绪(与嵌入状态卡同源消费) */
+    embedding?: EmbeddingSummary | null;
+}
+
+/** 书库列表项的嵌入就绪摘要:ready = done 且模型与当前配置一致(S3/S4 同一裁决口径)。 */
+export interface EmbeddingSummary {
+    status: 'none' | 'pending' | 'running' | 'done' | 'failed';
+    model: string | null;
+    ready: boolean;
 }
 
 export interface ChapterSummary {
@@ -136,7 +145,7 @@ export interface ChatSession {
     updatedAt: string;
 }
 
-/** 引用来源(refs);首版三种:选中文字、章节与检索块(M4)。 */
+/** 引用来源(refs);首版三种:选中文字、章节与检索块(M4);S4 检索块另携书籍身份。 */
 export interface ChatRef {
     type: 'selection' | 'chapter' | 'retrieval';
     text?: string;
@@ -148,6 +157,9 @@ export interface ChatRef {
     chapterSeq?: number;
     excerpt?: string;
     chunkSeq?: number;
+    /** S4 跨书检索块专用:书标识与书名快照(落库时定格,D-33 删书后靠快照降级占位) */
+    bookId?: number;
+    bookTitle?: string | null;
 }
 
 export interface ChatMessage {
@@ -170,6 +182,12 @@ export interface AskInput {
     retrieval?: boolean;
 }
 
+/** 跨书提问(S4,D-36):无书 id、无 selection、无检索标志——跨书提问恒为检索式。 */
+export interface GlobalAskInput {
+    content: string;
+    sessionId?: number | null;
+}
+
 export interface AskMeta {
     sessionId: number;
     sessionTitle: string;
@@ -178,13 +196,18 @@ export interface AskMeta {
     citations?: Citation[] | null;
 }
 
-/** 检索引用(章节标识 + 标题 + 原文摘录;S3 跳转用)。 */
+/**
+ * 检索引用(章节标识 + 标题 + 原文摘录;S3 跳转用)。S4 跨书时另携书籍身份:
+ * bookId + 书名快照(书删除后前端据书库列表降级为"原书已删除"占位,D-33)。
+ */
 export interface Citation {
     chapterId: number;
     chapterTitle: string | null;
     chapterSeq: number;
     chunkSeq: number;
     excerpt: string;
+    bookId?: number | null;
+    bookTitle?: string | null;
 }
 
 export interface AskDone {
@@ -285,6 +308,76 @@ export function createClient({baseUrl = '', token, sameOriginBlocked}: ClientOpt
             // 非 JSON 响应,退回状态文案
         }
         return `请求失败(${res.status})`
+    }
+
+    /** 发起 SSE 提问请求(书级/跨书共用):鉴权头 + JSON 体 + 网络层错误换可读文案。 */
+    async function postSse(path: string, input: unknown, signal?: AbortSignal): Promise<Response> {
+        if (!baseUrl && sameOriginBlocked) throw new ApiError(0, sameOriginBlocked)
+        let res: Response
+        try {
+            res = await fetch(baseUrl + path, {
+                method: 'POST',
+                headers: {...headers(), 'Content-Type': 'application/json'},
+                body: JSON.stringify(input),
+                signal,
+            })
+        } catch (e) {
+            if (e instanceof DOMException && e.name === 'AbortError') throw e
+            throw new ApiError(0, '无法连接到后端:请确认后端已启动,或在连接设置里检查后端地址')
+        }
+        if (!res.ok) {
+            throw new ApiError(res.status, await errorMessage(res))
+        }
+        if (!res.body) throw new ApiError(0, '后端未返回流式响应')
+        return res
+    }
+
+    /** 消费 SSE 流(书级/跨书同构的事件序列):meta → delta… → done / error。 */
+    async function consumeSse(res: Response, events: AskEvents): Promise<void> {
+        const reader = res.body!.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        let sawTerminal = false // done 或 error 至少一个才算流正常收尾
+        for (; ;) {
+            const {done, value} = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, {stream: true})
+            // SSE 事件以空行分隔;逐块解析完整的 event:/data: 对
+            let sep: number
+            while ((sep = buffer.indexOf('\n\n')) >= 0) {
+                const block = buffer.slice(0, sep)
+                buffer = buffer.slice(sep + 2)
+                const name = /(?:^|\n)event:(.*)/.exec(block)?.[1]?.trim()
+                const data = /(?:^|\n)data:(.*)/.exec(block)?.[1]?.trim()
+                if (!name || data == null) continue
+                let payload: any
+                try {
+                    payload = JSON.parse(data)
+                } catch {
+                    continue
+                }
+                switch (name) {
+                    case 'meta':
+                        events.onMeta?.(payload as AskMeta)
+                        break
+                    case 'delta':
+                        events.onDelta?.((payload as { text: string }).text)
+                        break
+                    case 'done':
+                        sawTerminal = true
+                        events.onDone?.(payload as AskDone)
+                        break
+                    case 'error':
+                        sawTerminal = true
+                        events.onError?.((payload as { message: string }).message)
+                        break
+                }
+            }
+        }
+        if (!sawTerminal) {
+            // 连接中断且无终态事件(done/error):不悬挂,显式报错
+            events.onError?.('AI 连接中断,请重试')
+        }
     }
 
     return {
@@ -410,6 +503,11 @@ export function createClient({baseUrl = '', token, sameOriginBlocked}: ClientOpt
             return requestList<ChatSession>(`/api/books/${bookId}/sessions`)
         },
 
+        /** 跨书会话列表(S4):仅 book_id 为空的会话,按最近活跃排序。 */
+        listGlobalSessions(): Promise<ChatSession[]> {
+            return requestList<ChatSession>('/api/sessions')
+        },
+
         /** 某书嵌入状态(最新任务);未建任务返回 none。 */
         getEmbeddingStatus(bookId: number): Promise<EmbeddingStatus> {
             return request<EmbeddingStatus>(`/api/books/${bookId}/embedding`)
@@ -441,68 +539,16 @@ export function createClient({baseUrl = '', token, sameOriginBlocked}: ClientOpt
         /** 书级提问(SSE 流式):meta → delta… → done / error;4xx(未配置/预算不足等)
          * 在流开始前抛 ApiError(可读文案);流中错误经 onError 回调收尾,不悬挂。 */
         async askStream(bookId: number, input: AskInput, events: AskEvents, signal?: AbortSignal): Promise<void> {
-            if (!baseUrl && sameOriginBlocked) throw new ApiError(0, sameOriginBlocked)
-            let res: Response
-            try {
-                res = await fetch(baseUrl + `/api/books/${bookId}/ask`, {
-                    method: 'POST',
-                    headers: {...headers(), 'Content-Type': 'application/json'},
-                    body: JSON.stringify(input),
-                    signal,
-                })
-            } catch (e) {
-                if (e instanceof DOMException && e.name === 'AbortError') throw e
-                throw new ApiError(0, '无法连接到后端:请确认后端已启动,或在连接设置里检查后端地址')
-            }
-            if (!res.ok) {
-                throw new ApiError(res.status, await errorMessage(res))
-            }
-            if (!res.body) throw new ApiError(0, '后端未返回流式响应')
+            const res = await postSse(`/api/books/${bookId}/ask`, input, signal)
+            await consumeSse(res, events)
+        },
 
-            const reader = res.body.getReader()
-            const decoder = new TextDecoder()
-            let buffer = ''
-            let sawTerminal = false // done 或 error 至少一个才算流正常收尾
-            for (; ;) {
-                const {done, value} = await reader.read()
-                if (done) break
-                buffer += decoder.decode(value, {stream: true})
-                // SSE 事件以空行分隔;逐块解析完整的 event:/data: 对
-                let sep: number
-                while ((sep = buffer.indexOf('\n\n')) >= 0) {
-                    const block = buffer.slice(0, sep)
-                    buffer = buffer.slice(sep + 2)
-                    const name = /(?:^|\n)event:(.*)/.exec(block)?.[1]?.trim()
-                    const data = /(?:^|\n)data:(.*)/.exec(block)?.[1]?.trim()
-                    if (!name || data == null) continue
-                    let payload: any
-                    try {
-                        payload = JSON.parse(data)
-                    } catch {
-                        continue
-                    }
-                    switch (name) {
-                        case 'meta':
-                            events.onMeta?.(payload as AskMeta)
-                            break
-                        case 'delta':
-                            events.onDelta?.((payload as { text: string }).text)
-                            break
-                        case 'done':
-                            sawTerminal = true
-                            events.onDone?.(payload as AskDone)
-                            break
-                        case 'error':
-                            sawTerminal = true
-                            events.onError?.((payload as { message: string }).message)
-                            break
-                    }
-                }
-            }
-            if (!sawTerminal) {
-                // 连接中断且无终态事件(done/error):不悬挂,显式报错
-                events.onError?.('AI 连接中断,请重试')
-            }
+        /** 跨书提问(S4,SSE 流式与书级同构):meta → delta… → done / error,
+         * citations 随 meta 下发并携带书籍身份;4xx(未配置 embedding/全库无就绪书等)
+         * 在流开始前抛 ApiError(可读文案)。 */
+        async askGlobalStream(input: GlobalAskInput, events: AskEvents, signal?: AbortSignal): Promise<void> {
+            const res = await postSse('/api/ask', input, signal)
+            await consumeSse(res, events)
         },
     }
 }

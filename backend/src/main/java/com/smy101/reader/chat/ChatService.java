@@ -27,10 +27,12 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -81,7 +83,6 @@ public class ChatService {
     }
 
     // ---- 提问(S1 与 S2 同一通路,D-32:带 selection 即 S1) ----
-
     /**
      * 受理提问:全部可前置校验在此完成(书/会话/目标章/选中文字/模型设置/预算),
      * 用户消息即落库;通过则返回 SSE emitter,流式部分转 {@link #stream} 异步执行。
@@ -168,13 +169,66 @@ public class ChatService {
         // 检索式装配(S3 显式 / S2 自动降级):检索先于 LLM 调用,引用随 meta 事件下发
         List<DocumentChunkRepository.ChunkHit> hits = null;
         if (retrievalRequested || plan.mode() == BudgetCalculator.Mode.RETRIEVAL) {
-            hits = fitRetrieval(retrieveTopK(endpoint, bookId, content), plan.effectiveLimit());
+            hits = fitRetrieval(retrieveTopK(endpoint, List.of(bookId), content), plan.effectiveLimit());
         }
         String bookContent = hits != null
-                ? assembleRetrievalContent(hits)
+                ? assembleRetrievalContent(hits, false)
                 : assembleBookContent(plan, chapters, targetChapter, selection);
-        List<ChatDtos.CitationDto> citations = hits == null ? null : toCitations(hits);
+        List<ChatDtos.CitationDto> citations = hits == null ? null : toCitations(hits, false);
         List<LlmAdapter.LlmMessage> prompt = buildPrompt(book, bookContent, plan.keptMessages(), content);
+        return new PreparedAsk(settings, session, userMessage.getId(), plan, prompt, citations);
+    }
+
+    // ---- 跨书提问(S4,D-36/D-32/D-33) ----
+
+    /**
+     * 受理跨书提问(全局端点):前置两态(未配置 embedding / 全库无就绪书)可读中文错误,
+     * 其余未就绪情形(某书未嵌入、模型已换)静默排除不报错——多书场景下逐书报错只会变成噪音。
+     * 检索 = 问题向量在全库就绪书集合内 cosine top-k(k 沿用 S3 取值,不做每书配额);
+     * 预算复用既有口径(份额贪心 + D-37 近似计数,历史消息照常填剩余额度)。
+     */
+    public PreparedAsk prepareGlobal(ChatDtos.GlobalAskRequest request) {
+        String content = request == null ? null : request.content();
+        if (content == null || content.isBlank()) {
+            throw new IllegalArgumentException("提问内容不能为空");
+        }
+        content = content.strip();
+
+        ModelSettings settings = settingsMapper.selectById(1);
+        if (settings == null) {
+            throw new IllegalArgumentException("尚未配置模型设置:请先在 AI 设置页填写 Base URL 与 Chat 模型");
+        }
+
+        EmbeddingEndpoint endpoint = EmbeddingEndpoint.from(settings);
+        if (endpoint == null) {
+            throw new IllegalArgumentException("尚未配置 embedding 模型:请先在 AI 设置页配置后再使用跨书提问");
+        }
+        Set<Long> readyBooks = embeddingJobService.readyBookIds();
+        if (readyBooks.isEmpty()) {
+            throw new IllegalArgumentException("书库中还没有嵌入完成的书:请先在书籍页完成至少一本书的嵌入");
+        }
+
+        // 会话路由三态(D-32 精神):指定 session_id 必须是跨书会话 / 缺省取最近活跃 / 都没有先不建
+        ChatSession session = resolveGlobalSession(request.sessionId());
+
+        // 预算:跨书恒为检索式(设计如此,非降级),复用 RETRIEVAL 模式装历史消息
+        List<BudgetCalculator.MessageCandidate> history =
+                session == null ? List.of() : historyCandidates(session.getId());
+        BudgetCalculator.BudgetPlan plan = BudgetCalculator.calculate(new BudgetCalculator.BudgetInput(
+                settings.getChatContextTokens(), null, null, null, history, true));
+        plan = stripRetrievalDegradeNote(plan); // 剔除与跨书语境不符的降级文案,保留断尾说明
+
+        if (session == null) {
+            session = createGlobalSession(content); // 标题 = 首条提问截断,同书级口径
+        }
+
+        ChatMessage userMessage = insertMessage(session.getId(), "user", content, null);
+
+        List<DocumentChunkRepository.ChunkHit> hits =
+                fitRetrieval(retrieveTopK(endpoint, readyBooks, content), plan.effectiveLimit());
+        String bookContent = assembleRetrievalContent(hits, true); // 溯源头带〔书名·第 N 章〕
+        List<ChatDtos.CitationDto> citations = toCitations(hits, true); // 引用携书籍身份
+        List<LlmAdapter.LlmMessage> prompt = buildGlobalPrompt(bookContent, plan.keptMessages(), content);
         return new PreparedAsk(settings, session, userMessage.getId(), plan, prompt, citations);
     }
 
@@ -232,6 +286,15 @@ public class ChatService {
         requireBook(bookId);
         return sessionMapper.selectList(new LambdaQueryWrapper<ChatSession>()
                         .eq(ChatSession::getBookId, bookId)
+                        .orderByDesc(ChatSession::getUpdatedAt)
+                        .orderByDesc(ChatSession::getId))
+                .stream().map(this::toSessionDto).toList();
+    }
+
+    /** 跨书会话列表(S4):仅 book_id 为空的会话,按最近活跃排序;书级列表(eq 过滤)天然不含它们。 */
+    public List<ChatDtos.SessionDto> listGlobalSessions() {
+        return sessionMapper.selectList(new LambdaQueryWrapper<ChatSession>()
+                        .isNull(ChatSession::getBookId)
                         .orderByDesc(ChatSession::getUpdatedAt)
                         .orderByDesc(ChatSession::getId))
                 .stream().map(this::toSessionDto).toList();
@@ -322,15 +385,16 @@ public class ChatService {
                 : EmbeddingReadiness.MODEL_CHANGED;
     }
 
-    /** 问题向量检索 top-k(检索先于 LLM 调用;上游失败抛 LlmException → 502 可读文案)。 */
+    /** 问题向量检索 top-k(检索先于 LLM 调用;上游失败抛 LlmException → 502 可读文案)。
+     * bookIds 为就绪书集合(S3 单书传单元素集合,S4 传全库就绪集合;空集 = 全库)。 */
     private List<DocumentChunkRepository.ChunkHit> retrieveTopK(
-            EmbeddingEndpoint endpoint, long bookId, String question) {
+            EmbeddingEndpoint endpoint, Collection<Long> bookIds, String question) {
         List<float[]> vectors = embeddingsClient.embed(new EmbeddingsClient.EmbeddingRequest(
                 endpoint.baseUrl(), endpoint.apiKey(), endpoint.model(), List.of(question)));
         if (vectors.size() != 1) {
             throw new LlmException("Embedding 服务返回向量数异常");
         }
-        return chunkRepository.searchTopK(bookId, vectors.get(0), RETRIEVAL_TOP_K);
+        return chunkRepository.searchTopK(bookIds, vectors.get(0), RETRIEVAL_TOP_K);
     }
 
     /** 检索块贪心装入预算份额(至少保底 1 块:小预算下答案可回溯优先)。 */
@@ -350,23 +414,30 @@ public class ChatService {
         return kept;
     }
 
-    /** 检索块装配书内容槽(S3 与 S2 降级共用;块前带章节溯源头)。 */
-    private String assembleRetrievalContent(List<DocumentChunkRepository.ChunkHit> hits) {
-        StringBuilder sb = new StringBuilder("【检索到的相关段落】(依据提问检索自本书,按相关度排序)\n");
+    /** 检索块装配书内容槽(S3/S2 降级与 S4 跨书共用;跨书块前带〔书名·第 N 章〕溯源头)。 */
+    private String assembleRetrievalContent(List<DocumentChunkRepository.ChunkHit> hits, boolean crossBook) {
+        StringBuilder sb = new StringBuilder(crossBook
+                ? "【检索到的相关段落】(依据提问检索自书库多本书,按相关度排序)\n"
+                : "【检索到的相关段落】(依据提问检索自本书,按相关度排序)\n");
         for (int i = 0; i < hits.size(); i++) {
             DocumentChunkRepository.ChunkHit hit = hits.get(i);
             String title = hit.chapterTitle() == null ? "" : " " + hit.chapterTitle();
-            sb.append("〔").append(i + 1).append("·第").append(hit.chapterSeq()).append("章")
-                    .append(title).append("〕")
+            sb.append("〔").append(i + 1).append("·");
+            if (crossBook) {
+                sb.append("《").append(hit.bookTitle()).append("》·");
+            }
+            sb.append("第").append(hit.chapterSeq()).append("章").append(title).append("〕")
                     .append(hit.content()).append("\n\n");
         }
         return sb.toString().stripTrailing();
     }
 
-    private List<ChatDtos.CitationDto> toCitations(List<DocumentChunkRepository.ChunkHit> hits) {
+    private List<ChatDtos.CitationDto> toCitations(List<DocumentChunkRepository.ChunkHit> hits, boolean crossBook) {
         return hits.stream()
                 .map(hit -> new ChatDtos.CitationDto(
-                        hit.chapterId(), hit.chapterTitle(), hit.chapterSeq(), hit.seq(), hit.content()))
+                        hit.chapterId(), hit.chapterTitle(), hit.chapterSeq(), hit.seq(), hit.content(),
+                        crossBook ? hit.bookId() : null,
+                        crossBook ? hit.bookTitle() : null))
                 .toList();
     }
 
@@ -384,6 +455,11 @@ public class ChatService {
             ref.put("chapterSeq", citation.chapterSeq());
             ref.put("chunkSeq", citation.chunkSeq());
             ref.put("excerpt", citation.excerpt());
+            if (citation.bookId() != null) {
+                // 书名快照(D-33):落库时定格,书删除后引用仍可读、前端零额外查询
+                ref.put("bookId", citation.bookId());
+                ref.put("bookTitle", citation.bookTitle());
+            }
             refs.add(ref);
         }
         try {
@@ -409,9 +485,34 @@ public class ChatService {
                 .last("LIMIT 1"));
     }
 
+    /** 跨书会话路由(D-32 精神):指定 id 必须存在且为跨书会话(book_id 为空);缺省取最近活跃。 */
+    private ChatSession resolveGlobalSession(Long sessionId) {
+        if (sessionId != null) {
+            ChatSession session = sessionMapper.selectById(sessionId);
+            if (session == null || session.getBookId() != null) {
+                throw new NoSuchElementException("会话不存在或不是跨书会话");
+            }
+            return session;
+        }
+        return sessionMapper.selectOne(new LambdaQueryWrapper<ChatSession>()
+                .isNull(ChatSession::getBookId)
+                .orderByDesc(ChatSession::getUpdatedAt)
+                .orderByDesc(ChatSession::getId)
+                .last("LIMIT 1"));
+    }
+
     private ChatSession createSession(long bookId, String firstQuestion) {
         ChatSession created = new ChatSession();
         created.setBookId(bookId);
+        created.setTitle(truncateTitle(firstQuestion));
+        sessionMapper.insert(created);
+        return sessionMapper.selectById(created.getId());
+    }
+
+    /** 新建跨书会话:book_id 为空(不随任何书删除级联,D-33),标题口径同书级。 */
+    private ChatSession createGlobalSession(String firstQuestion) {
+        ChatSession created = new ChatSession();
+        created.setBookId(null);
         created.setTitle(truncateTitle(firstQuestion));
         sessionMapper.insert(created);
         return sessionMapper.selectById(created.getId());
@@ -491,6 +592,25 @@ public class ChatService {
                 请依据下面提供的书籍内容回答读者问题;内容不足以回答时如实说明,不要编造。
 
                 %s""".formatted(book.getTitle(), bookContent);
+        return assembleMessages(system, history, question);
+    }
+
+    /** 跨书 prompt(S4):系统说明为多书语境(不绑定单一书名),检索块自带〔书名·章节〕溯源。 */
+    private List<LlmAdapter.LlmMessage> buildGlobalPrompt(String retrievalContent,
+                                                          List<BudgetCalculator.MessageCandidate> history,
+                                                          String question) {
+        String system = """
+                你是一个 AI 阅读助手,正在帮读者在个人书库里做跨书问答与对比。\
+                下面提供从多本书检索到的相关段落(带〔书名·章节〕溯源),\
+                请依据这些段落回答读者问题,可对比不同书的视角;内容不足以回答时如实说明,不要编造。
+
+                %s""".formatted(retrievalContent);
+        return assembleMessages(system, history, question);
+    }
+
+    private List<LlmAdapter.LlmMessage> assembleMessages(String system,
+                                                         List<BudgetCalculator.MessageCandidate> history,
+                                                         String question) {
         List<LlmAdapter.LlmMessage> messages = new ArrayList<>();
         messages.add(new LlmAdapter.LlmMessage("system", system));
         for (BudgetCalculator.MessageCandidate candidate : history) {
@@ -498,6 +618,21 @@ public class ChatService {
         }
         messages.add(new LlmAdapter.LlmMessage("user", question));
         return messages;
+    }
+
+    /**
+     * 剔除预算计划里与跨书语境不符的检索式降级文案(跨书恒为检索式,设计如此非降级),
+     * 保留历史断尾说明。纯函数不动,口径适配在调用方完成。
+     */
+    private BudgetCalculator.BudgetPlan stripRetrievalDegradeNote(BudgetCalculator.BudgetPlan plan) {
+        String note = plan.note();
+        if (note == null || !note.startsWith("目标章超出上下文预算")) {
+            return plan;
+        }
+        int sep = note.indexOf(';');
+        String rest = sep >= 0 ? note.substring(sep + 1) : null;
+        return new BudgetCalculator.BudgetPlan(plan.mode(), plan.effectiveLimit(), plan.bookContentTokens(),
+                plan.keptMessages(), plan.droppedCount(), rest);
     }
 
     /** 落一条消息并刷新会话活跃度(新消息 = 一次活跃)。 */

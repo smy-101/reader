@@ -4,6 +4,8 @@ import com.smy101.reader.book.dto.BookDetail;
 import com.smy101.reader.book.dto.BookListItem;
 import com.smy101.reader.book.dto.ChapterListItem;
 import com.smy101.reader.book.dto.UploadBookResponse;
+import com.smy101.reader.embedding.EmbeddingJobService;
+import com.smy101.reader.embedding.dto.EmbeddingDtos;
 import com.smy101.reader.reading.ReadingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.InputStreamResource;
@@ -41,6 +43,7 @@ public class BookController {
 
     private final BookService bookService;
     private final ReadingService readingService;
+    private final EmbeddingJobService embeddingJobService;
 
     /** 上传 EPUB(FR-101):同步解析 → 入库 → 落盘;响应含完整元数据。 */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -48,17 +51,20 @@ public class BookController {
         return bookService.upload(file.getBytes());
     }
 
-    /** 书库列表(FR-103):封面、标题、作者 + 真实进度百分比(M1 接通 reading_progress);新上传在前。 */
+    /** 书库列表(FR-103):封面、标题、作者 + 真实进度百分比(M1 接通 reading_progress);新上传在前;
+     * S4 增嵌入就绪摘要(US 25,一次拿齐,不逐书拼判断)。 */
     @GetMapping
     public List<BookListItem> listBooks() {
         Map<Long, Integer> percents = readingService.progressPercentByBookId();
+        Map<Long, EmbeddingDtos.EmbeddingSummary> embeddings = embeddingJobService.embeddingSummaries();
         return bookService.listAll().stream()
                 .map(book -> new BookListItem(
                         book.getId(),
                         book.getTitle(),
                         book.getAuthor(),
                         BookService.coverUrl(book),
-                        percents.get(book.getId())))
+                        percents.get(book.getId()),
+                        embeddings.get(book.getId())))
                 .toList();
     }
 

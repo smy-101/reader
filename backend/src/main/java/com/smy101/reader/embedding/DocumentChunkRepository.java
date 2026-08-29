@@ -6,6 +6,8 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -22,8 +24,9 @@ public class DocumentChunkRepository {
     public record ChunkRow(long chapterId, int seq, String content, int tokenCount, float[] embedding) {
     }
 
-    /** 检索命中块(带章节溯源信息,S3 引用与跳转用)。 */
-    public record ChunkHit(long chapterId, int seq, String content, int tokenCount,
+    /** 检索命中块(带章节与书籍溯源信息,S3 引用跳转与 S4 跨书引用用)。 */
+    public record ChunkHit(long bookId, String bookTitle,
+                           long chapterId, int seq, String content, int tokenCount,
                            String chapterTitle, Integer chapterSeq) {
     }
 
@@ -67,22 +70,46 @@ public class DocumentChunkRepository {
                 });
     }
 
-    /** 按书 cosine 检索 top-k(ADR-0008:个人量级顺序扫描,<=> 为 cosine 距离)。 */
-    public List<ChunkHit> searchTopK(long bookId, float[] queryVector, int k) {
+    /**
+     * 按书集合 cosine 检索 top-k(ADR-0008:个人量级顺序扫描,<=> 为 cosine 距离)。
+     * S3 单书与 S4 多书共用同一条查询路径:bookIds 为空 = 不过滤(全库);
+     * 命中携带书籍身份(bookId + 书名,S4 跨书引用与 D-33 书名快照用)。
+     */
+    public List<ChunkHit> searchTopK(Collection<Long> bookIds, float[] queryVector, int k) {
+        List<Object> params = new ArrayList<>(bookIds.size() + 2);
+        StringBuilder in = new StringBuilder();
+        if (!bookIds.isEmpty()) {
+            in.append("WHERE c.book_id IN (");
+            for (Long bookId : bookIds) {
+                if (params.size() > 0) {
+                    in.append(',');
+                }
+                in.append('?');
+                params.add(bookId);
+            }
+            in.append(") ");
+        }
+        params.add(toVectorLiteral(queryVector));
+        params.add(k);
         return jdbc.query(
-                "SELECT c.chapter_id, c.seq, c.content, c.token_count, ch.title AS chapter_title, ch.seq AS chapter_seq "
-                        + "FROM document_chunk c JOIN chapter ch ON ch.id = c.chapter_id "
-                        + "WHERE c.book_id = ? "
+                "SELECT c.book_id, b.title AS book_title, c.chapter_id, c.seq, c.content, c.token_count, "
+                        + "ch.title AS chapter_title, ch.seq AS chapter_seq "
+                        + "FROM document_chunk c "
+                        + "JOIN chapter ch ON ch.id = c.chapter_id "
+                        + "JOIN book b ON b.id = c.book_id "
+                        + in
                         + "ORDER BY c.embedding <=> ?::vector ASC "
                         + "LIMIT ?",
                 (rs, i) -> new ChunkHit(
+                        rs.getLong("book_id"),
+                        rs.getString("book_title"),
                         rs.getLong("chapter_id"),
                         rs.getInt("seq"),
                         rs.getString("content"),
                         rs.getInt("token_count"),
                         rs.getString("chapter_title"),
                         rs.getInt("chapter_seq")),
-                bookId, toVectorLiteral(queryVector), k);
+                params.toArray());
     }
 
     /** float[] → pgvector 字面量 '[v1,v2,...]'(足够精度,确定性)。 */

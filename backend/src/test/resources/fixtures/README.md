@@ -1,6 +1,6 @@
 # 测试 fixtures
 
-四个 EPUB 测试文件,由 `generate_fixtures.py` 生成(改动后重跑 `python3 generate_fixtures.py` 再提交):
+五个 EPUB 测试文件,由 `generate_fixtures.py` 生成(改动后重跑 `python3 generate_fixtures.py` 再提交):
 
 | 文件 | 内容 | 对应行为 |
 |---|---|---|
@@ -8,5 +8,8 @@
 | `corrupt.epub` | zip 头合法但尾部截断 | 400 文件损坏 |
 | `drm.epub` | 合法 EPUB + `META-INF/encryption.xml`(AES 内容加密) | 400 疑似 DRM |
 | `font-obfuscated.epub` | 合法 EPUB + 仅字体混淆(IDPF 白名单算法) | 正常导入,不误拦 |
+| `chibi.epub` | 第二本书:赤壁赋选(苏轼),内容域与 normal.epub 互斥 | S4 跨书检索:两书同传后袋向量检索可确定性断言"命中跨两书" |
 
 `normal.epub` 覆盖的边界:nav.xhtml 在 spine 中且与 OPF 不同目录(目录本体不入库、href 相对 nav 解析);ch4 标记 `linear="no"` 不入库;ch5 无标题不在目录中(标题 NULL);ch3 含嵌套脚注(只取最外层)。
+
+`chibi.epub` 覆盖的边界:nav 与 OPF 同目录(href 相对解析另一侧);书名/正文与 normal.epub 完全不同词域,嵌入后问题向量可让检索命中分别落在两本书上。

@@ -3,11 +3,13 @@
 
 用法:python3 generate_fixtures.py   (在 fixtures 目录内执行)
 
-产出三个文件:
+产出五个文件:
 - normal.epub  正常书:3 章,含图片(应被丢)、表格(应拍平)、脚注(应并入章末)、
                代码块(应保留)、EPUB3 nav 目录、封面(PNG)
 - corrupt.epub 损坏文件:合法 zip 头 + 截断的内容
 - drm.epub     DRM 构造书:合法 EPUB + META-INF/encryption.xml 加密标记
+- chibi.epub   第二本书(S4 跨书检索):赤壁赋选,与 normal.epub 内容域互斥,
+               两书同传后袋向量检索可确定性断言“命中跨两书”
 """
 
 import io
@@ -143,6 +145,66 @@ CH5 = """<?xml version="1.0" encoding="UTF-8"?>
 </html>
 """
 
+CHIBI_OPF = """<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="uid">urn:uuid:fixture-chibi-0002</dc:identifier>
+    <dc:title>赤壁赋选</dc:title>
+    <dc:creator>苏轼</dc:creator>
+    <dc:language>zh-CN</dc:language>
+    <meta property="dcterms:modified">2026-01-01T00:00:00Z</meta>
+    <meta name="cover" content="cover-image"/>
+  </metadata>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="cover-image" href="cover.png" media-type="image/png" properties="cover-image"/>
+    <item id="c1" href="ch1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="c2" href="ch2.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="c1"/>
+    <itemref idref="c2"/>
+  </spine>
+</package>
+"""
+
+CHIBI_NAV = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>目录</title></head>
+<body>
+  <nav epub:type="toc">
+    <ol>
+      <li><a href="ch1.xhtml">壬戌之秋</a></li>
+      <li><a href="ch2.xhtml">哀吾生之须臾</a></li>
+    </ol>
+  </nav>
+</body>
+</html>
+"""
+
+CHIBI_CH1 = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>ch1</title></head>
+<body>
+  <h1>壬戌之秋</h1>
+  <p>壬戌之秋,七月既望,苏子与客泛舟游于赤壁之下。</p>
+  <p>清风徐来,水波不兴。举酒属客,诵明月之诗,歌窈窕之章。</p>
+  <p>少焉,月出于东山之上,徘徊于斗牛之间。白露横江,水光接天。</p>
+</body>
+</html>
+"""
+
+CHIBI_CH2 = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>ch2</title></head>
+<body>
+  <h1>哀吾生之须臾</h1>
+  <p>寄蜉蝣于天地,渺沧海之一粟。哀吾生之须臾,羡长江之无穷。</p>
+  <p>挟飞仙以遨游,抱明月而长终。知不可乎骤得,托遗响于悲风。</p>
+</body>
+</html>
+"""
+
 DRM = """<?xml version="1.0" encoding="UTF-8"?>
 <encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
   <EncryptedData xmlns="http://www.w3.org/2001/04/xmlenc#">
@@ -191,6 +253,20 @@ def build_normal() -> None:
     write_epub(os.path.join(HERE, "normal.epub"), entries)
 
 
+def build_chibi() -> None:
+    """S4 跨书检索第二本书:赤壁赋选(内容域与 normal.epub 互斥,书名/正文均不同)。"""
+    entries = [
+        ("mimetype", b"application/epub+zip"),
+        ("META-INF/container.xml", CONTAINER_XML.encode()),
+        ("OEBPS/content.opf", CHIBI_OPF.encode()),
+        ("OEBPS/nav.xhtml", CHIBI_NAV.encode()),
+        ("OEBPS/ch1.xhtml", CHIBI_CH1.encode()),
+        ("OEBPS/ch2.xhtml", CHIBI_CH2.encode()),
+        ("OEBPS/cover.png", PNG_1PX),
+    ]
+    write_epub(os.path.join(HERE, "chibi.epub"), entries)
+
+
 def build_corrupt() -> None:
     """合法 zip 头 + 截断数据:解析必然失败,且失败原因应是 zip 层而非 XML 层。"""
     buf = io.BytesIO()
@@ -234,9 +310,10 @@ def build_font_obfuscated() -> None:
 
 if __name__ == "__main__":
     build_normal()
+    build_chibi()
     build_corrupt()
     build_drm()
     build_font_obfuscated()
-    for name in ("normal.epub", "corrupt.epub", "drm.epub", "font-obfuscated.epub"):
+    for name in ("normal.epub", "chibi.epub", "corrupt.epub", "drm.epub", "font-obfuscated.epub"):
         p = os.path.join(HERE, name)
         print(name, os.path.getsize(p), "bytes")

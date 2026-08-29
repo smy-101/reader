@@ -2,6 +2,7 @@ package com.smy101.reader.embedding;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.smy101.reader.book.Book;
 import com.smy101.reader.book.BookMapper;
 import com.smy101.reader.book.BookUploadedEvent;
 import com.smy101.reader.book.Chapter;
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -145,6 +147,45 @@ public class EmbeddingJobService {
                 .eq(EmbeddingJob::getBookId, bookId)
                 .orderByDesc(EmbeddingJob::getId)
                 .last("LIMIT 1"));
+    }
+
+    /**
+     * 全库就绪书集合(S4 跨书检索范围,D-36):最新任务 done 且模型与当前 embedding 配置一致。
+     * 与 S3 单书"嵌入完成"同一裁决口径的集合化;未嵌入/进行中/失败/模型已换均静默排除。
+     */
+    public Set<Long> readyBookIds() {
+        String currentModel = currentModel();
+        if (currentModel == null) {
+            return Set.of();
+        }
+        return jobMapper.selectLatestPerBook().stream()
+                .filter(job -> EmbeddingJob.STATUS_DONE.equals(job.getStatus())
+                        && currentModel.equals(job.getModel()))
+                .map(EmbeddingJob::getBookId)
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    /**
+     * 书库列表项的嵌入就绪摘要(US 25):每书最新任务状态 + 是否就绪,一次查询全库拿齐;
+     * 前端入口显隐与状态卡同源消费。embedding 未配置时全部 ready=false。
+     */
+    public Map<Long, EmbeddingDtos.EmbeddingSummary> embeddingSummaries() {
+        String currentModel = currentModel();
+        Map<Long, EmbeddingJob> latest = jobMapper.selectLatestPerBook().stream()
+                .collect(java.util.stream.Collectors.toMap(EmbeddingJob::getBookId, job -> job));
+        return bookMapper.selectList(null).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        Book::getId,
+                        book -> {
+                            EmbeddingJob job = latest.get(book.getId());
+                            boolean ready = currentModel != null && job != null
+                                    && EmbeddingJob.STATUS_DONE.equals(job.getStatus())
+                                    && currentModel.equals(job.getModel());
+                            return new EmbeddingDtos.EmbeddingSummary(
+                                    job == null ? "none" : job.getStatus(),
+                                    job == null ? null : job.getModel(),
+                                    ready);
+                        }));
     }
 
     // ---- 内部:任务创建与执行 ----

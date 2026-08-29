@@ -16,7 +16,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.util.List;
 
 /**
- * AI 对话 API(M3-03,FR-301/303/304):书级提问(SSE 流式,D-25)+ 会话 CRUD。
+ * AI 对话 API(M3-03,FR-301/303/304):书级提问(SSE 流式,D-25)+ 会话 CRUD;
+ * S4 增全局跨书提问与跨书会话列表(D-36)。
  * 提问受理期的可前置失败(书/会话/目标章/选中文字/设置/预算)以 4xx JSON 返回;
  * 流式期失败以 SSE error 事件收尾(FR-303 不悬挂)。均受既有 token 拦截。
  */
@@ -38,10 +39,28 @@ public class ChatController {
         return emitter;
     }
 
+    /**
+     * 跨书提问(S4,D-36):全局端点(书前缀之外的独立路径),恒为检索式;
+     * 响应 SSE 事件序列与书级完全同构(meta → delta… → done / error,citations 随 meta)。
+     */
+    @PostMapping(value = "/api/ask", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter askGlobal(@RequestBody ChatDtos.GlobalAskRequest request) {
+        ChatService.PreparedAsk prepared = chatService.prepareGlobal(request);
+        SseEmitter emitter = new SseEmitter(0L);
+        chatService.stream(prepared, emitter);
+        return emitter;
+    }
+
     /** 某书会话列表,按最近活跃排序。 */
     @GetMapping("/api/books/{bookId}/sessions")
     public List<ChatDtos.SessionDto> listSessions(@PathVariable long bookId) {
         return chatService.listSessions(bookId);
+    }
+
+    /** 跨书会话列表(S4):仅 book_id 为空的会话,按最近活跃排序。 */
+    @GetMapping("/api/sessions")
+    public List<ChatDtos.SessionDto> listGlobalSessions() {
+        return chatService.listGlobalSessions();
     }
 
     /** 会话全部消息(含 refs),打开会话一次拿齐。 */

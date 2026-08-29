@@ -53,13 +53,28 @@ public final class ChatDtos {
         }
     }
 
-    /** 检索引用(S3 与 S2 检索式降级;章节标识 + 标题 + 原文摘录,摘录即向量块全文)。 */
+    /**
+     * 跨书提问请求(S4,D-36):无书 id、无 selection、无 retrieval 标志——跨书提问恒为检索式;
+     * sessionId 可选(缺省 = 最近活跃的跨书会话,无则新建,标题取首条提问截断)。
+     */
+    public record GlobalAskRequest(
+            String content,
+            Long sessionId) {
+    }
+
+    /**
+     * 检索引用(S3 与 S2 检索式降级;章节标识 + 标题 + 原文摘录,摘录即向量块全文)。
+     * S4 跨书时另携书籍身份:bookId + 书名快照(落库时取快照存进 refs,不靠实时 join,D-33);
+     * 书级提问不填这两字段,既有形状不受影响。
+     */
     public record CitationDto(
             Long chapterId,
             String chapterTitle,
             Integer chapterSeq,
             Integer chunkSeq,
-            String excerpt) {
+            String excerpt,
+            Long bookId,
+            String bookTitle) {
     }
 
     /** SSE meta 事件:落定的会话与用户消息标识 + 检索引用(可为 null;S3 在流式开始前即可渲染)。 */
