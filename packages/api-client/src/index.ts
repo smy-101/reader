@@ -18,6 +18,7 @@ export interface BookListItem {
 }
 
 export interface ChapterSummary {
+    id: number;
     seq: number;
     title: string | null;
     href: string;
@@ -123,6 +124,63 @@ export interface ProbeOutcome {
 export interface TestConnectionResult {
     chat: ProbeOutcome;
     embedding: ProbeOutcome;
+}
+
+// ---- AI 对话(M3,FR-301/303/304) ----
+
+export interface ChatSession {
+    id: number;
+    bookId: number | null;
+    title: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** 引用来源(refs);首版两种:选中文字与章节。 */
+export interface ChatRef {
+    type: 'selection' | 'chapter';
+    text?: string;
+    cfi?: string;
+    chapterId?: number;
+    chapterTitle?: string | null;
+    seq?: number;
+}
+
+export interface ChatMessage {
+    id: number;
+    sessionId: number;
+    role: 'user' | 'assistant';
+    content: string;
+    refs: ChatRef[] | null;
+    createdAt: string;
+}
+
+/** 书级提问(S1 与 S2 同一通路,D-32:带 selection 即 S1)。 */
+export interface AskInput {
+    content: string;
+    sessionId?: number | null;
+    chapterId?: number | null;
+    cfi?: string | null;
+    selection?: { text: string; cfi?: string | null } | null;
+}
+
+export interface AskMeta {
+    sessionId: number;
+    sessionTitle: string;
+    userMessageId: number;
+}
+
+export interface AskDone {
+    assistantMessageId: number;
+    note: string | null;
+}
+
+/** SSE 事件回调(显式事件类型,FR-303):onError 收尾则其余不再来。 */
+export interface AskEvents {
+    onMeta?: (meta: AskMeta) => void;
+    onDelta?: (text: string) => void;
+    onDone?: (done: AskDone) => void;
+    onError?: (message: string) => void;
 }
 
 // ---- 错误 ----
@@ -301,6 +359,104 @@ export function createClient({baseUrl = '', token, sameOriginBlocked}: ClientOpt
                 headers: {'Content-Type': 'application/json'},
                 body: input ? JSON.stringify(input) : undefined,
             })
+        },
+
+        // ---- 章节 ----
+
+        /** 章节列表(spine 阅读序;AI 目标章映射用,D-31) */
+        listChapters(bookId: number): Promise<ChapterSummary[]> {
+            return requestList<ChapterSummary>(`/api/books/${bookId}/chapters`)
+        },
+
+        // ---- AI 对话 ----
+
+        /** 某书会话列表,按最近活跃排序。 */
+        listSessions(bookId: number): Promise<ChatSession[]> {
+            return requestList<ChatSession>(`/api/books/${bookId}/sessions`)
+        },
+
+        /** 会话全部消息(含 refs),打开会话一次拿齐。 */
+        listSessionMessages(sessionId: number): Promise<ChatMessage[]> {
+            return requestList<ChatMessage>(`/api/sessions/${sessionId}/messages`)
+        },
+
+        renameSession(sessionId: number, title: string): Promise<ChatSession> {
+            return request<ChatSession>(`/api/sessions/${sessionId}`, {
+                method: 'PATCH',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({title}),
+            })
+        },
+
+        deleteSession(sessionId: number): Promise<void> {
+            return request<void>(`/api/sessions/${sessionId}`, {method: 'DELETE'})
+        },
+
+        /** 书级提问(SSE 流式):meta → delta… → done / error;4xx(未配置/预算不足等)
+         * 在流开始前抛 ApiError(可读文案);流中错误经 onError 回调收尾,不悬挂。 */
+        async askStream(bookId: number, input: AskInput, events: AskEvents, signal?: AbortSignal): Promise<void> {
+            if (!baseUrl && sameOriginBlocked) throw new ApiError(0, sameOriginBlocked)
+            let res: Response
+            try {
+                res = await fetch(baseUrl + `/api/books/${bookId}/ask`, {
+                    method: 'POST',
+                    headers: {...headers(), 'Content-Type': 'application/json'},
+                    body: JSON.stringify(input),
+                    signal,
+                })
+            } catch (e) {
+                if (e instanceof DOMException && e.name === 'AbortError') throw e
+                throw new ApiError(0, '无法连接到后端:请确认后端已启动,或在连接设置里检查后端地址')
+            }
+            if (!res.ok) {
+                throw new ApiError(res.status, await errorMessage(res))
+            }
+            if (!res.body) throw new ApiError(0, '后端未返回流式响应')
+
+            const reader = res.body.getReader()
+            const decoder = new TextDecoder()
+            let buffer = ''
+            let sawTerminal = false // done 或 error 至少一个才算流正常收尾
+            for (; ;) {
+                const {done, value} = await reader.read()
+                if (done) break
+                buffer += decoder.decode(value, {stream: true})
+                // SSE 事件以空行分隔;逐块解析完整的 event:/data: 对
+                let sep: number
+                while ((sep = buffer.indexOf('\n\n')) >= 0) {
+                    const block = buffer.slice(0, sep)
+                    buffer = buffer.slice(sep + 2)
+                    const name = /(?:^|\n)event:(.*)/.exec(block)?.[1]?.trim()
+                    const data = /(?:^|\n)data:(.*)/.exec(block)?.[1]?.trim()
+                    if (!name || data == null) continue
+                    let payload: any
+                    try {
+                        payload = JSON.parse(data)
+                    } catch {
+                        continue
+                    }
+                    switch (name) {
+                        case 'meta':
+                            events.onMeta?.(payload as AskMeta)
+                            break
+                        case 'delta':
+                            events.onDelta?.((payload as { text: string }).text)
+                            break
+                        case 'done':
+                            sawTerminal = true
+                            events.onDone?.(payload as AskDone)
+                            break
+                        case 'error':
+                            sawTerminal = true
+                            events.onError?.((payload as { message: string }).message)
+                            break
+                    }
+                }
+            }
+            if (!sawTerminal) {
+                // 连接中断且无终精事件:不悬挂,显式报错
+                events.onError?.('AI 连接中断,请重试')
+            }
         },
     }
 }

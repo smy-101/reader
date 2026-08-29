@@ -50,4 +50,6 @@ export interface FoliateView extends HTMLElement {
     deleteAnnotation(annotation: { value: string }): Promise<unknown>
     renderer?: FoliateRenderer
     book?: { toc?: TocItem[]; sections?: unknown[] }
+    /** 最新阅读位置(vendor 每次 relocate 后更新;AI 目标章映射用,D-31) */
+    lastLocation?: RelocateDetail
 }

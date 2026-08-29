@@ -1,6 +1,7 @@
 import {ChildProcess, execFileSync, execSync, spawn} from 'node:child_process'
 import {setTimeout as sleep} from 'node:timers/promises'
 import {request} from '@playwright/test'
+import {stubLlm, stubLlmReset} from './stub-llm'
 
 /**
  * E2E 编排(M1-03,细节实现时定、验收只看用例绿):
@@ -88,21 +89,24 @@ export async function upBackend() {
     throw new Error('后端未就绪(60s)')
 }
 
-/** 清空书库(E2E 容器专属;级联会带走章节/划线/进度,storage 残留无害:同 hash 重传幂等)。 */
+/** 清空书库与 AI 域(E2E 容器专属;级联会带走章节/划线/进度/消息,storage 残留无害:同 hash 重传幂等)。 */
 export async function resetBackend() {
     execFileSync('docker', [
         'exec', PG_CONTAINER,
         'psql', '-U', 'reader_app', '-d', 'reader_e2e',
-        '-c', 'TRUNCATE highlight, reading_progress, chapter, book RESTART IDENTITY CASCADE',
+        '-c', 'TRUNCATE chat_message, chat_session, highlight, reading_progress, chapter, book, model_settings RESTART IDENTITY CASCADE',
     ], {stdio: 'ignore'})
+    await stubLlmReset() // 跨进程清 stub 记录(经 HTTP)
 }
 
 export default async function globalSetup() {
+    await stubLlm.start() // M3:本地流式 stub LLM(OpenAI 兼容,设置页/E2E 配置指向它)
     await upPostgres()
     await upBackend()
     return async function globalTeardown() {
-        console.log('[e2e] teardown:停后端 + 删容器')
+        console.log('[e2e] teardown:停后端 + 删容器 + 停 stub')
         backend?.kill('SIGTERM')
+        await stubLlm.stop()
         try {
             execSync(`docker rm -f ${PG_CONTAINER}`, {stdio: 'ignore'})
         } catch {

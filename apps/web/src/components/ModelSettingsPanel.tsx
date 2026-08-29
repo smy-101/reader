@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react'
+import {useEffect, useRef, useState} from 'react'
 import {api} from '../client'
 import type {ModelSettingsInput, TestConnectionResult} from '@reader/api-client'
 
@@ -17,12 +17,17 @@ export function ModelSettingsPanel({onClose}: { onClose: () => void }) {
     const [embeddingBaseUrl, setEmbeddingBaseUrl] = useState('')
     const [embeddingApiKey, setEmbeddingApiKey] = useState('')
     const [loadError, setLoadError] = useState<string | null>(null)
+    const [loaded, setLoaded] = useState(false)
+    const bootstrappedRef = useRef(false)
     const [testing, setTesting] = useState(false)
     const [testResult, setTestResult] = useState<TestConnectionResult | null>(null)
     const [saveError, setSaveError] = useState<string | null>(null)
     const [saved, setSaved] = useState(false)
 
+    // 打开时回填已保存配置;StrictMode 双调用下只拉一次(迟到的回调会覆盖用户输入)
     useEffect(() => {
+        if (bootstrappedRef.current) return
+        bootstrappedRef.current = true
         void (async () => {
             try {
                 const s = await api.getModelSettings()
@@ -35,9 +40,14 @@ export function ModelSettingsPanel({onClose}: { onClose: () => void }) {
                 setEmbeddingApiKey(s.embeddingApiKey ?? '')
             } catch (e) {
                 setLoadError(e instanceof Error ? e.message : String(e))
+            } finally {
+                setLoaded(true)
             }
         })()
     }, [])
+
+    // 表单在已保存配置加载完成后才可编辑(避免加载中填入的值被异步回调覆盖)
+    const editable = loaded && !testing
 
     const valid = baseUrl.trim() !== '' && chatModel.trim() !== ''
 
@@ -97,42 +107,49 @@ export function ModelSettingsPanel({onClose}: { onClose: () => void }) {
                     Base URL
                     <input type="text" inputMode="url" placeholder="https://api.example.com/v1"
                            value={baseUrl} onChange={e => setBaseUrl(e.target.value)}
+                           disabled={!editable}
                            data-testid="model-base-url"/>
                 </label>
                 <label className="dialog-field">
                     API key(明文保存与回显)
                     <input type="text" placeholder="sk-…(本地服务可留空)"
                            value={apiKey} onChange={e => setApiKey(e.target.value)}
+                           disabled={!editable}
                            data-testid="model-api-key"/>
                 </label>
                 <label className="dialog-field">
                     Chat 模型
                     <input type="text" placeholder="如 deepseek-chat"
                            value={chatModel} onChange={e => setChatModel(e.target.value)}
+                           disabled={!editable}
                            data-testid="model-chat-model"/>
                 </label>
                 <label className="dialog-field">
                     上下文上限(留空 = 8k 保守)
                     <input type="number" min={1} placeholder="8192"
                            value={contextTokens} onChange={e => setContextTokens(e.target.value)}
+                           disabled={!editable}
                            data-testid="model-context-tokens"/>
                 </label>
                 <label className="dialog-field">
                     Embedding 模型(可选;未配置则 AI 检索相关功能隐藏)
                     <input type="text" placeholder="bge-m3"
                            value={embeddingModel} onChange={e => setEmbeddingModel(e.target.value)}
+                           disabled={!editable}
                            data-testid="model-embedding-model"/>
                 </label>
                 <label className="dialog-field">
                     Embedding Base URL(可选,留空跟随 chat)
                     <input type="text" inputMode="url" placeholder="https://api.example.com/v1"
                            value={embeddingBaseUrl} onChange={e => setEmbeddingBaseUrl(e.target.value)}
+                           disabled={!editable}
                            data-testid="model-embedding-base-url"/>
                 </label>
                 <label className="dialog-field">
                     Embedding API key(可选,留空跟随 chat)
                     <input type="text" placeholder="sk-…"
                            value={embeddingApiKey} onChange={e => setEmbeddingApiKey(e.target.value)}
+                           disabled={!editable}
                            data-testid="model-embedding-api-key"/>
                 </label>
 
@@ -152,11 +169,11 @@ export function ModelSettingsPanel({onClose}: { onClose: () => void }) {
                 {saved && <p className="test-result ok" data-testid="model-saved-hint">已保存</p>}
 
                 <div className="dialog-actions">
-                    <button onClick={() => void testConnection()} disabled={!valid || testing}
+                    <button onClick={() => void testConnection()} disabled={!valid || !editable}
                             data-testid="model-settings-test">
                         {testing ? '测试中…' : '测试连接'}
                     </button>
-                    <button className="primary" onClick={() => void save()} disabled={!valid}
+                    <button className="primary" onClick={() => void save()} disabled={!valid || !editable}
                             data-testid="model-settings-save">
                         保存
                     </button>

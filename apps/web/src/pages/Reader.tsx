@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useState} from 'react'
+import {useCallback, useEffect, useRef, useState} from 'react'
 import type {BookListItem, Highlight} from '@reader/api-client'
 import {api} from '../client'
 import {FoliateViewHost} from '../reader/FoliateViewHost'
@@ -8,6 +8,7 @@ import {FOLIATE_VIEW_URL, loadFoliateModule} from '../reader/foliate-urls'
 import {useHighlights} from '../reader/useHighlights'
 import {useAutoReportProgress} from '../reader/useProgress'
 import {HighlightBar, HighlightListPanel} from '../components/Highlights'
+import {AiPanel, type PendingSelection} from '../components/AiPanel'
 
 /**
  * 阅读器(M1-05/07/08):渲染、目录、本地设置;选中划线(颜色/备注/删除)、全量拉取;进度接续与上报。
@@ -22,6 +23,10 @@ export function Reader({bookId, onExit}: { bookId: number; onExit: () => void })
     const [settings, setSettings] = useState<ReaderSettings>(() => loadSettings())
     const [progressLabel, setProgressLabel] = useState<string>('')
     const [view, setView] = useState<FoliateView | null>(null)
+    const [aiOpen, setAiOpen] = useState(false)
+    const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null)
+    /** 当前阅读位置(最新 relocate 详情);AI 目标章映射用(D-31) */
+    const relocateRef = useRef<RelocateDetail | null>(null)
 
     const hl = useHighlights(view, bookId, status === 'ready')
     useAutoReportProgress(view, bookId, status === 'ready')
@@ -99,6 +104,7 @@ export function Reader({bookId, onExit}: { bookId: number; onExit: () => void })
 
             v.addEventListener('relocate', e => {
                 const detail = (e as CustomEvent<RelocateDetail>).detail
+                relocateRef.current = detail // AI 目标章映射(D-31)
                 if (detail?.fraction != null) {
                     setProgressLabel(`${Math.round(detail.fraction * 100)}%`)
                 }
@@ -134,6 +140,7 @@ export function Reader({bookId, onExit}: { bookId: number; onExit: () => void })
                 <button onClick={() => setHighlightsOpen(o => !o)} data-testid="highlights-toggle">
                     划线({hl.highlights.length})
                 </button>
+                <button onClick={() => setAiOpen(o => !o)} data-testid="ai-toggle">AI</button>
                 <label className="setting">
                     字号
                     <button
@@ -186,6 +193,16 @@ export function Reader({bookId, onExit}: { bookId: number; onExit: () => void })
                             void view?.goTo(h.cfi)
                         }}
                         onEdit={h => hl.setEditing(h)}
+                    />
+                )}
+                {aiOpen && (
+                    <AiPanel
+                        bookId={bookId}
+                        view={view}
+                        relocateRef={relocateRef}
+                        pendingSelection={pendingSelection}
+                        onClearPending={() => setPendingSelection(null)}
+                        onClose={() => setAiOpen(false)}
                     />
                 )}
                 <div className="reader-main">

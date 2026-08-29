@@ -17,7 +17,8 @@ import java.util.List;
  * (Windows WebView2 为 {@code http://tauri.localhost}),白名单徒增维护——取舍见 ADR-0006。</li>
  * <li><b>不放行 credentials</b>(无 Access-Control-Allow-Credentials 头):鉴权走 Authorization
  * 头而非 cookie,浏览器侧无 cookie 可滥用。</li>
- * <li>放行 Authorization / Content-Type 头与 GET/POST/PUT/DELETE/OPTIONS 方法。</li>
+ * <li>放行 Authorization / Content-Type 头与 GET/POST/PUT/PATCH/DELETE/OPTIONS 方法
+ * (PATCH:M3 会话重命名)。</li>
  * </ul>
  * 实现要点:以 {@link FilterRegistrationBean} 把 {@link CorsFilter} 挂在过滤器链<b>最前</b>
  * (先于 {@code TokenAuthFilter}),由此两件事自然成立——
@@ -34,7 +35,7 @@ public class CorsConfig {
     public FilterRegistrationBean<CorsFilter> corsFilter() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of(CorsConfiguration.ALL));
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
         config.setAllowCredentials(false);
 

@@ -44,7 +44,7 @@ class CorsIntegrationTest extends IntegrationTestBase {
         assertThat(res.getHeaders().getAccessControlAllowOrigin()).isEqualTo("*");
         assertThat(lower(res.getHeaders().getAccessControlAllowHeaders()))
                 .contains("authorization", "content-type");
-        assertThat(allowMethods(res)).contains("GET", "POST", "PUT", "DELETE", "OPTIONS");
+        assertThat(allowMethods(res)).contains("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS");
     }
 
     @Test
