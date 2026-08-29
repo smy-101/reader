@@ -498,11 +498,13 @@ button {
     top: 0;
     right: 0;
     bottom: 0;
-    width: 380px;
+    width: min(380px, 100%); /* 窄窗口不溢出定位锚左缘 */
     display: flex;
     flex-direction: column;
     border-left: 1px solid #8884;
-    background: inherit;
+    /* 覆盖层必须不透明:面板悬于正文之上,inherit 会继承 .reader-body 的透明背景,
+       书页文字透出与消息混叠(M3-05 改覆盖层时的遗留)。取 .reader 上的主题背景。 */
+    background: var(--reader-bg, #fff);
     box-shadow: -8px 0 24px #0002;
     z-index: 40;
 }
