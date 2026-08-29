@@ -4,12 +4,12 @@
 
 **Blocked by:** None(可立即开始)
 
-**Status:** ready-for-agent
+**Status:** done(done(Seam A 12 用例绿;设置页 7 项 + 测试连接双探针;mvn test 全绿零回归) 2026-08-29)
 
-- [ ] 设置页可保存/回显 7 项配置;上下文上限与 embedding 各项可空,空语义 = 8k 保守 / 跟随 chat(FR-401 / D-27 / D-28)
-- [ ] 测试连接:chat 探针 ok / 连接失败 / 超时 / 401 / 404 → 各自可读中文文案;embedding 未配置 → 明示跳过;已配置 → 独立 base_url 生效(FR-405)
-- [ ] model_settings 单行表经 Flyway 迁移落地,id 恒为 1(D-17 / D-27)
-- [ ] API key 明文存库、设置页明文回显(FR-404 已接受姿态)
-- [ ] bge-m3 仅作 placeholder 提示(R9-Q5)
-- [ ] 新端点不带/带错 token 一律 401;错误响应可读文案(与 M0–M2 一致)
-- [ ] Seam A 集成测试(本地 stub 上游)覆盖上述全部行为,mvn test 绿,既有测试零回归
+- [x] 设置页可保存/回显 7 项配置;上下文上限与 embedding 各项可空,空语义 = 8k 保守 / 跟随 chat(FR-401 / D-27 / D-28)
+- [x] 测试连接:chat 探针 ok / 连接失败 / 超时 / 401 / 404 → 各自可读中文文案;embedding 未配置 → 明示跳过;已配置 → 独立 base_url 生效(FR-405)
+- [x] model_settings 单行表经 Flyway 迁移落地,id 恒为 1(D-17 / D-27)
+- [x] API key 明文存库、设置页明文回显(FR-404 已接受姿态)
+- [x] bge-m3 仅作 placeholder 提示(R9-Q5)
+- [x] 新端点不带/带错 token 一律 401;错误响应可读文案(与 M0–M2 一致)
+- [x] Seam A 集成测试(本地 stub 上游)覆盖上述全部行为,mvn test 绿,既有测试零回归
