@@ -69,6 +69,8 @@ public abstract class IntegrationTestBase {
 
     @BeforeEach
     void cleanState() throws IOException {
+        jdbc.update("DELETE FROM chat_message");
+        jdbc.update("DELETE FROM chat_session");
         jdbc.update("DELETE FROM highlight");
         jdbc.update("DELETE FROM reading_progress");
         jdbc.update("DELETE FROM chapter");

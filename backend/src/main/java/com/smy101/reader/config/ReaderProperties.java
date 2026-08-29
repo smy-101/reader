@@ -36,5 +36,8 @@ public class ReaderProperties {
     public static class Llm {
         /** 测试连接探针超时毫秒数(FR-405) */
         private long probeTimeoutMs = 5000;
+
+        /** 流式对话上游空闲超时毫秒数(相邻数据块最大间隔;超时断流,FR-303 不悬挂) */
+        private long streamIdleTimeoutMs = 60_000;
     }
 }

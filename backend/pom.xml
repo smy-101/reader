@@ -49,7 +49,7 @@
     <dependency>
       <groupId>org.postgresql</groupId>
       <artifactId>postgresql</artifactId>
-      <scope>runtime</scope>
+      <!-- compile:JsonbTypeHandler 直接使用 PGobject(jsonb 写入) -->
     </dependency>
 
     <!-- EPUB(xhtml)解析与正文清洗(D-40) -->

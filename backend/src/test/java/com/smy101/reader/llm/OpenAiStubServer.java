@@ -87,6 +87,10 @@ public class OpenAiStubServer implements AutoCloseable {
         this.modelsBehavior = new Behavior(200, null, true);
     }
 
+    public void hangChat() {
+        this.chatBehavior = new Behavior(200, null, true);
+    }
+
     public void chat(int status, String bodyOrSse) {
         this.chatBehavior = Behavior.of(status, bodyOrSse);
     }
@@ -98,6 +102,24 @@ public class OpenAiStubServer implements AutoCloseable {
         }
         sse.append("[DONE]");
         chatBehavior = Behavior.of(200, "sse:" + sse);
+    }
+
+    /** 断流:发若干块后直接关连接(无 [DONE])→ 客户端应报断流,已到内容照常落库。 */
+    public void chatStreamAbrupt(List<String> deltas) {
+        StringBuilder sse = new StringBuilder();
+        for (String delta : deltas) {
+            sse.append("{\"choices\":[{\"delta\":{\"content\":\"").append(delta).append("\"}}]}\n");
+        }
+        chatBehavior = Behavior.of(200, "sse:" + sse);
+    }
+
+    /** 流中挂死:发若干块后握住连接不响应 → 客户端空闲超时。 */
+    public void chatStreamThenHang(List<String> deltas) {
+        StringBuilder sse = new StringBuilder();
+        for (String delta : deltas) {
+            sse.append("{\"choices\":[{\"delta\":{\"content\":\"").append(delta).append("\"}}]}\n");
+        }
+        chatBehavior = new Behavior(200, "sse-hang:" + sse, false);
     }
 
     // ---- 请求记录 ----
@@ -143,6 +165,10 @@ public class OpenAiStubServer implements AutoCloseable {
                 respondSse(exchange, behavior.body().substring("sse:".length()));
                 return;
             }
+            if (behavior.status() == 200 && behavior.body() != null && behavior.body().startsWith("sse-hang:")) {
+                respondSseThenHang(exchange, behavior.body().substring("sse-hang:".length()));
+                return;
+            }
             respond(exchange, behavior.status(), behavior.body() == null ? "" : behavior.body());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -171,6 +197,21 @@ public class OpenAiStubServer implements AutoCloseable {
                 out.flush();
                 Thread.sleep(30); // 逼出"逐块到达"的流式形态
             }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /** 多块 SSE 后握住连接:测流中空闲超时。 */
+    private void respondSseThenHang(HttpExchange exchange, String ssePayload) throws IOException {
+        exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
+        exchange.sendResponseHeaders(200, 0); // chunked
+        try (OutputStream out = exchange.getResponseBody()) {
+            for (String line : ssePayload.split("\n", -1)) {
+                out.write(("data: " + line + "\n\n").getBytes(StandardCharsets.UTF_8));
+                out.flush();
+            }
+            Thread.sleep(10_000); // 块发完后挂住
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
