@@ -3,17 +3,26 @@ import type {BookListItem, Highlight} from '@reader/api-client'
 import {api} from '../client'
 import {FoliateViewHost} from '../reader/FoliateViewHost'
 import type {FoliateView, RelocateDetail, TocItem} from '../reader/foliate-types'
+import {jumpToCitation} from '../reader/locate'
 import {loadSettings, saveSettings, THEME_COLORS, type ReaderSettings} from '../reader/settings'
 import {FOLIATE_VIEW_URL, loadFoliateModule} from '../reader/foliate-urls'
 import {useHighlights} from '../reader/useHighlights'
 import {useAutoReportProgress} from '../reader/useProgress'
 import {HighlightBar, HighlightListPanel} from '../components/Highlights'
 import {AiPanel, type PendingSelection} from '../components/AiPanel'
+import type {PendingCitationJump} from '../components/chat/citation-jump'
 
 /**
- * 阅读器(M1-05/07/08):渲染、目录、本地设置;选中划线(颜色/备注/删除)、全量拉取;进度接续与上报。
+ * 阅读器(M1-05/07/08):渲染、目录、本地设置;选中划线(颜色/备注/删除)、全量拉取;进度接续与上报;
+ * S4 增跨书引用跳转落地(书库全局 AI 面板 → 打开对应书 → 就绪后 S3 同款章 + 摘录定位)。
  */
-export function Reader({bookId, onExit}: { bookId: number; onExit: () => void }) {
+export function Reader({bookId, pendingJump, onConsumeJump, onExit}: {
+    bookId: number
+    /** 跨书引用跳转信号(经应用顶层状态传递);就绪后执行一次即消费 */
+    pendingJump?: PendingCitationJump | null
+    onConsumeJump?: () => void
+    onExit: () => void
+}) {
     const [meta, setMeta] = useState<BookListItem | null>(null)
     const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
     const [error, setError] = useState<string | null>(null)
@@ -128,13 +137,28 @@ export function Reader({bookId, onExit}: { bookId: number; onExit: () => void })
         renderer.setStyles(`:root { font-size: ${settings.fontSize}% !important; color: ${fg}; background: ${bg}; }`)
     }, [settings, view, status]) // status:书就绪后再刷一次样式
 
+    // 跨书引用跳转(S4-03):书就绪后执行一次 S3 同款定位(章 + 摘录,未命中停章首),即消费
+    useEffect(() => {
+        if (status !== 'ready' || !view || !pendingJump) return
+        const jump = pendingJump
+        onConsumeJump?.()
+        void (async () => {
+            try {
+                const chapters = await api.listChapters(bookId)
+                await jumpToCitation(view, chapters, jump)
+            } catch {
+                // 跳转失败不报错:停在书首即可(与未命中停章首同口径)
+            }
+        })()
+    }, [status, view, pendingJump, bookId, onConsumeJump])
+
     const changeSettings = (patch: Partial<ReaderSettings>) => setSettings(s => ({...s, ...patch}))
 
     return (
         <main className="reader" data-theme={settings.theme} data-testid="reader-root">
             <header className="reader-header">
                 <button onClick={onExit} data-testid="back-to-library">← 书库</button>
-                <h1 className="reader-title">{meta?.title ?? '阅读器'}</h1>
+                <h1 className="reader-title" data-testid="reader-title">{meta?.title ?? '阅读器'}</h1>
                 <span className="reader-progress" data-testid="reader-progress-label">{progressLabel}</span>
                 <button onClick={() => setTocOpen(o => !o)} data-testid="toc-toggle">目录</button>
                 <button onClick={() => setHighlightsOpen(o => !o)} data-testid="highlights-toggle">

@@ -8,16 +8,19 @@ import {api} from '../client'
  * 四态同一触发端点(多态一语义:首次嵌入 / 失败重试 / 换模型全量重嵌入)。
  * 完成但模型已换(US 13):明示「embedding 模型已更换,需重新嵌入」,S3 入口在
  * 重嵌入完成前隐藏(AiPanel 侧同一裁决)。未配置 embedding 时由父级整体隐藏(FR-403)。
+ * S4:观察到转入 done 时回调 onSettled(书库重拉就绪摘要,全局 AI 入口亮起,US 25)。
  */
 
 /** 轮询间隔:进行中(pending/running)每 1.5s 拉一次进度;拉取失败 5s 后重试。 */
 const POLL_INTERVAL_MS = 1500
 const RETRY_INTERVAL_MS = 5000
 
-export function EmbeddingStatusCard({bookId, embeddingModel}: {
+export function EmbeddingStatusCard({bookId, embeddingModel, onSettled}: {
     bookId: number
     /** 当前配置的 embedding 模型(父级从模型设置拉取);与任务模型比对裁决“模型已更换” */
     embeddingModel: string | null
+    /** 观察到转入 done 时回调一次(重拉书库就绪摘要;首拉即 done 不回,免常态噪音) */
+    onSettled?: () => void
 }) {
     const [status, setStatus] = useState<EmbeddingStatus | null>(null)
     const [actionError, setActionError] = useState<string | null>(null)
@@ -25,6 +28,8 @@ export function EmbeddingStatusCard({bookId, embeddingModel}: {
     /** 触发后自增:重启轮询循环(进入 running 直至终态) */
     const [pollNonce, setPollNonce] = useState(0)
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    /** 上次观察到的状态(转入 done 的边沿检测;null = 首次观察前) */
+    const prevStatusRef = useRef<string | null>(null)
 
     useEffect(() => {
         let cancelled = false
@@ -34,6 +39,11 @@ export function EmbeddingStatusCard({bookId, embeddingModel}: {
                 if (cancelled) return
                 setStatus(s)
                 setActionError(null)
+                if (s.status === 'done' && prevStatusRef.current != null
+                        && prevStatusRef.current !== 'done') {
+                    onSettled?.() // 重嵌入/重试完成:书库就绪摘要需要重拉(S4 入口亮起)
+                }
+                prevStatusRef.current = s.status
                 if (s.status === 'pending' || s.status === 'running') {
                     timerRef.current = setTimeout(() => void tick(), POLL_INTERVAL_MS)
                 }
@@ -48,7 +58,7 @@ export function EmbeddingStatusCard({bookId, embeddingModel}: {
             cancelled = true
             if (timerRef.current != null) clearTimeout(timerRef.current)
         }
-    }, [bookId, pollNonce])
+    }, [bookId, pollNonce, onSettled])
 
     async function trigger() {
         setBusy(true)

@@ -2,14 +2,19 @@ import {useCallback, useEffect, useRef, useState} from 'react'
 import type {AskInput, ChapterSummary, ChatMessage, ChatRef, ChatSession, Citation} from '@reader/api-client'
 import {api} from '../client'
 import type {FoliateView, RelocateDetail} from '../reader/foliate-types'
+import {jumpToCitation} from '../reader/locate'
+import {ChatComposer} from './chat/ChatComposer'
+import {MessageBubble} from './chat/MessageBubble'
+import {citationsToRefs, CitationBar} from './chat/CitationBar'
 
 /**
- * AI 伴读面板(M3-04,S2;M4-05,S3):该书会话列表 + 消息流(含引用展示)+ 输入框;
- * 回复流式增量渲染,错误显式提示不悬挂(FR-303);会话可重命名/删除(FR-304)。
+ * AI 伴读面板(M3-04,S2;M4-05,S3;S4 抽出共用件):该书会话列表 + 消息流(含引用展示)
+ * + 输入框;回复流式增量渲染,错误显式提示不悬挂(FR-303);会话可重命名/删除(FR-304)。
  * 目标章映射(D-31):缺省携带当前阅读位置所在章(经 relocate 详情的 section index
  * 对应 foliate sections[index].id 与后端 chapter.href 后缀匹配),显式点名章用显式值。
  * S3 定位原文(M4-05):该书嵌入完成才显示「定位原文」入口(FR-403);检索引用随
  * meta 事件在流式开始前即可见,点击跳转到对应章节并尝试以摘录文字定位(未命中停章首)。
+ * 消息流/引用条/输入行为共用件(chat/*),跨书面板(GlobalAiPanel)同构复用。
  */
 
 /** S1 预填:划选后从菜单“问 AI”带进面板的选中文字(05 交付)。 */
@@ -167,7 +172,7 @@ export function AiPanel({bookId, view, relocateRef, pendingSelection, onClearPen
         const tempId = -Date.now()
         setMessages(prev => [...prev, {
             id: tempId, sessionId: activeId ?? 0, role: 'user' as const,
-            content, refs: optimisticRefs.length ? optimisticRefs : null, createdAt: '',
+            content, refs: optimisticRefs?.length ? optimisticRefs : null, createdAt: '',
         }])
         setInput('')
         onClearPending()
@@ -274,12 +279,10 @@ export function AiPanel({bookId, view, relocateRef, pendingSelection, onClearPen
     }
 
     /** 点击引用跳转:到对应章节 + 尝试以摘录文字定位(命中滚动到命中处,未命中停章首)。 */
-    async function jumpToCitation(citation: { chapterId?: number; chapterSeq?: number; chapterTitle?: string | null; excerpt?: string }) {
+    async function jump(citation: { chapterId?: number; excerpt?: string }) {
         const chaptersNow = await (chaptersReadyRef.current ?? Promise.resolve([] as ChapterSummary[]))
-        const chapter = chaptersNow.find(c => c.id === citation.chapterId)
-        if (!view || !chapter) return
-        await view.goTo(chapter.href) // 跳到对应章节(经 foliate 既有导航能力)
-        locateExcerpt(view, citation.excerpt ?? '')
+        if (!view) return
+        await jumpToCitation(view, chaptersNow, citation)
     }
 
     return (
@@ -321,9 +324,9 @@ export function AiPanel({bookId, view, relocateRef, pendingSelection, onClearPen
             </div>
 
             <div className="ai-messages" data-testid="ai-messages">
-                {messages.map(m => <MessageBubble key={m.id} message={m} onJump={jumpToCitation}/>)}
+                {messages.map(m => <MessageBubble key={m.id} message={m} onJump={jump}/>)}
                 {liveCitations !== null && (
-                    <CitationBar citations={liveCitations} onJump={jumpToCitation} testid="ai-live-citations"/>
+                    <CitationBar citations={liveCitations} onJump={jump} testid="ai-live-citations"/>
                 )}
                 {streaming && (
                     <div className="ai-msg assistant" data-testid="ai-streaming">
@@ -347,7 +350,15 @@ export function AiPanel({bookId, view, relocateRef, pendingSelection, onClearPen
                         </button>
                     </blockquote>
                 )}
-                <div className="ai-input-row">
+                <ChatComposer
+                    value={input}
+                    onChange={setInput}
+                    onSend={send}
+                    streaming={streaming}
+                    placeholder={retrievalMode
+                        ? '问“作者在哪讨论过…”(检索原文定位)'
+                        : activeSession ? '继续这段讨论…' : '向 AI 提问(自动创建会话)'}
+                    testPrefix="ai">
                     {embeddingReady && (
                         <button
                             className={`ai-retrieval-toggle ${retrievalMode ? 'on' : ''}`}
@@ -358,136 +369,8 @@ export function AiPanel({bookId, view, relocateRef, pendingSelection, onClearPen
                             {retrievalMode ? '定位原文:开' : '定位原文'}
                         </button>
                     )}
-                    <textarea
-                        value={input}
-                        onChange={e => setInput(e.target.value)}
-                        onKeyDown={e => {
-                            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                                e.preventDefault()
-                                void send()
-                            }
-                        }}
-                        placeholder={retrievalMode
-                            ? '问“作者在哪讨论过…”(检索原文定位)'
-                            : activeSession ? '继续这段讨论…' : '向 AI 提问(自动创建会话)'}
-                        data-testid="ai-input"
-                        rows={2}
-                        disabled={streaming}
-                    />
-                    <button className="primary" onClick={() => void send()} disabled={streaming || !input.trim()}
-                            data-testid="ai-send">
-                        {streaming ? '回复中…' : '发送'}
-                    </button>
-                </div>
+                </ChatComposer>
             </div>
         </aside>
     )
-}
-
-function MessageBubble({message, onJump}: { message: ChatMessage; onJump: (c: {
-    chapterId?: number; chapterSeq?: number; chapterTitle?: string | null; excerpt?: string
-}) => void }) {
-    const isUser = message.role === 'user'
-    const citations = (message.refs ?? []).filter(r => r.type === 'retrieval' && r.chapterId != null)
-    return (
-        <div className={`ai-msg ${isUser ? 'user' : 'assistant'}`}
-             data-testid={isUser ? 'ai-user-msg' : 'ai-assistant-msg'}>
-            {message.refs?.map((ref, i) => (
-                ref.type === 'selection'
-                    ? <blockquote key={i} className="ai-msg-ref" data-testid="ai-msg-ref-selection">“{ref.text}”</blockquote>
-                    : ref.type === 'retrieval' ? null : (
-                        <div key={i} className="ai-msg-ref chapter" data-testid="ai-msg-ref-chapter">
-                            引用章节:{ref.chapterTitle ?? `第 ${ref.seq ?? '?'} 章`}
-                        </div>
-                    )
-            ))}
-            {citations.length > 0 && (
-                <CitationBar
-                    testid="ai-msg-citations"
-                    citations={citations.map(c => ({
-                        chapterId: c.chapterId!,
-                        chapterSeq: c.chapterSeq ?? c.seq ?? 0,
-                        chapterTitle: c.chapterTitle ?? null,
-                        chunkSeq: c.chunkSeq ?? 0,
-                        excerpt: c.excerpt ?? '',
-                    }))}
-                    onJump={onJump}/>
-            )}
-            <div className="ai-msg-content" data-testid="ai-msg-content">{message.content}</div>
-        </div>
-    )
-}
-
-/** 检索引用条(S3):章节标题 + 原文摘录,点击跳转;流式开始前(meta 后)即可见。 */
-function CitationBar({citations, onJump, testid}: {
-    citations: Array<{ chapterId: number; chapterSeq?: number; chapterTitle?: string | null; excerpt?: string }>
-    onJump: (c: { chapterId?: number; chapterSeq?: number; chapterTitle?: string | null; excerpt?: string }) => void
-    testid: string
-}) {
-    return (
-        <div className="ai-citations" data-testid={testid}>
-            {citations.map((c, i) => (
-                <button
-                    key={`${c.chapterId}-${i}`}
-                    className="ai-citation"
-                    onClick={() => onJump(c)}
-                    data-testid="ai-citation"
-                    data-chapter-id={c.chapterId}>
-                    <span className="ai-citation-chapter" data-testid="ai-citation-chapter">
-                        第{c.chapterSeq || '?'}章 {c.chapterTitle ? `· ${c.chapterTitle}` : ''}
-                    </span>
-                    <span className="ai-citation-excerpt">{clampExcerpt(c.excerpt ?? '')}</span>
-                </button>
-            ))}
-        </div>
-    )
-}
-
-function clampExcerpt(text: string): string {
-    const compact = text.replaceAll(/\s+/g, ' ').trim()
-    return compact.length > 60 ? compact.slice(0, 60) + '…' : compact
-}
-
-/** 章内摘录定位:清洗文本与渲染 DOM 无一一对应(D-40),不承诺 CFI 级精确定位;
- * 取摘录归一化前缀在正文文本节点中搜索,命中滚动到命中处,未命中停章首不报错。 */
-function locateExcerpt(view: FoliateView, excerpt: string) {
-    const probe = excerpt.replaceAll(/\s+/g, '').slice(0, 40)
-    if (!probe) return
-    setTimeout(() => {
-        const contents = view.renderer?.getContents() ?? []
-        for (const content of contents) {
-            if (findTextAndScroll(content.doc, probe)) return
-        }
-    }, 120) // 等 goTo 后内容重绘
-}
-
-function findTextAndScroll(doc: Document, probe: string): boolean {
-    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT)
-    let acc = ''
-    let node: Node | null
-    while ((node = walker.nextNode()) != null) {
-        const text = node as Text
-        acc += (text.data ?? '').replaceAll(/\s+/g, '')
-        if (acc.includes(probe)) {
-            // 命中:滚动到包含命中尾段的最近元素(近似定位,v1 口径)
-            const el = text.parentElement ?? doc.body
-            el.scrollIntoView({block: 'center', behavior: 'smooth'})
-            return true
-        }
-        if (acc.length > 2_000_000) break // 防御超长章
-    }
-    return false
-}
-
-/** 引用条 → 消息 refs(与后端落库同形,乐观 UI 与重拉会话一致)。 */
-function citationsToRefs(citations: Citation[] | null): ChatRef[] | null {
-    if (!citations || citations.length === 0) return null
-    return citations.map(c => ({
-        type: 'retrieval' as const,
-        chapterId: c.chapterId,
-        chapterTitle: c.chapterTitle,
-        chapterSeq: c.chapterSeq,
-        chunkSeq: c.chunkSeq,
-        excerpt: c.excerpt,
-    }))
 }

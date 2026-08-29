@@ -13,10 +13,10 @@ export async function waitForRendered(page: Page): Promise<void> {
     )).not.toBe('')
 }
 
-/** 当前渲染正文纯文本。 */
+/** 当前渲染正文纯文本(未就绪返回空串,poll 重试友好)。 */
 export function renderedText(page: Page): Promise<string> {
     return page.evaluate(() =>
-        (document.querySelector('foliate-view') as any).renderer.getContents()[0].doc.body.innerText as string)
+        (document.querySelector('foliate-view') as any)?.renderer?.getContents?.()[0]?.doc?.body?.innerText ?? '')
 }
 
 /** 高亮图层里已画的高亮数(overlayer SVG 子元素,跨已加载 section 汇总)。 */

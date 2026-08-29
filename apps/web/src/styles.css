@@ -755,7 +755,6 @@ button {
 }
 
 /* ---- S3 定位原文:检索引用条与入口(M4-05) ---- */
-
 .ai-citations {
     display: flex;
     flex-direction: column;
@@ -777,9 +776,21 @@ button {
     font-size: 12px;
 }
 
-.ai-citation:hover {
+.ai-citation:hover:not(:disabled) {
     border-color: #0969da;
     background: #0969da14;
+}
+
+/* D-33 悬空引用降级:书已删除的引用占位、不可点 */
+.ai-citation.deleted {
+    border-left-color: #8886;
+    background: #8880d;
+    cursor: not-allowed;
+    opacity: .7;
+}
+
+.ai-citation.deleted .ai-citation-chapter {
+    color: #57606a;
 }
 
 .ai-citation-chapter {
@@ -812,4 +823,27 @@ button {
     border-color: #0969da;
     color: #0969da;
     background: #0969da14;
+}
+
+/* ---- S4 跨书 AI 面板:与阅读器内 AI 面板同构,弹层形态 ---- */
+
+.global-ai-dialog {
+    width: min(720px, calc(100vw - 48px));
+    height: min(680px, calc(100vh - 80px));
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
+}
+
+.global-ai-dialog .ai-panel-header {
+    padding: 10px 14px;
+}
+
+.global-ai-dialog .error {
+    margin: 4px 12px;
+}
+
+.global-ai-dialog .ai-note {
+    margin: 0;
 }

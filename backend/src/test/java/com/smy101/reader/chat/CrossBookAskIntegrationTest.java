@@ -216,6 +216,36 @@ class CrossBookAskIntegrationTest extends IntegrationTestBase {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM chat_message", Integer.class)).isZero();
     }
 
+    // ---- D-33:删书留跨书会话(FK 天然行为钉死为契约) ----
+
+    @Test
+    void 删一本书_跨书会话与消息原样保留_refs书名快照不动() throws IOException {
+        prepareTwoEmbeddedBooks();
+        long sessionId = askGlobalForSessionId(Map.of("content", "赤壁泛舟与代码脚注两处分别怎么说?"));
+        String refsBefore = jdbc.queryForObject(
+                "SELECT refs::text FROM chat_message WHERE session_id = " + sessionId
+                        + " AND role = 'assistant'", String.class);
+
+        // 删掉其中一本(书级会话/向量块随书级联;跨书会话 book_id 为空,级联天然不触及)
+        rest.exchange("/api/books/" + chibiBookId, HttpMethod.DELETE,
+                new HttpEntity<>(authHeaders()), String.class);
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM chat_session WHERE id = " + sessionId, Integer.class))
+                .isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM chat_message WHERE session_id = " + sessionId, Integer.class))
+                .isEqualTo(2); // 用户提问 + 助手回答原样
+        assertThat(jdbc.queryForObject(
+                "SELECT refs::text FROM chat_message WHERE session_id = " + sessionId
+                        + " AND role = 'assistant'", String.class)).isEqualTo(refsBefore); // 快照不动
+
+        // 删后再问:就绪集合收敛到剩余书,会话照常续(历史引用里悬空 bookId 不影响新提问)
+        ResponseEntity<String> again = ask(Map.of("content", "再聊聊赤壁?", "sessionId", sessionId));
+        assertThat(again.getStatusCode()).isEqualTo(HttpStatus.OK);
+        List<Map<String, Object>> citations = readCitations(dataLine(again.getBody(), "meta"));
+        assertThat(citations.stream().map(c -> ((Number) c.get("bookId")).longValue()))
+                .allSatisfy(bookId -> assertThat(bookId).isEqualTo(normalBookId));
+    }
+
     // ---- 书库列表就绪摘要(US 25) ----
 
     @Test

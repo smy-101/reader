@@ -17,6 +17,8 @@ const CHUNK_GAP_MS = 400
 
 let server: Server | null = null
 let lastChatRequest: { headers: IncomingMessage['headers']; body: string } | null = null
+/** embeddings 故障开关(FR-303 提问中途出错用例):开启后 /v1/embeddings 回 500。 */
+let embeddingsFail = false
 
 /** 经 HTTP 访问 stub 的记录(Playwright globalSetup 与测试文件是独立模块图,
  *  不能直接读模块内状态;一律走 HTTP 才能拿到服务进程里的真状态)。 */
@@ -29,6 +31,16 @@ async function fetchLast(): Promise<string | null> {
 /** 清空 stub 记录(跨进程安全)。 */
 export async function stubLlmReset(): Promise<void> {
     await fetch(`http://127.0.0.1:${E2E_STUB_PORT}/_reset`, {method: 'POST'})
+}
+
+/** 开关 embeddings 故障(开启后 /v1/embeddings 回 500,触发提问链路 502 可读错误)。 */
+export async function stubSetEmbeddingsFailure(on: boolean): Promise<void> {
+    const res = await fetch(`http://127.0.0.1:${E2E_STUB_PORT}/_embeddings-fail`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({on}),
+    })
+    if (!res.ok) throw new Error(`stub /_embeddings-fail 响应 ${res.status}`)
 }
 
 /** 最近一次 chat/completions 请求体(prompt 形状断言;未发过为 null)。 */
@@ -81,9 +93,21 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
             return
         }
         if (req.method === 'POST' && url === '/v1/embeddings') {
+            if (embeddingsFail) {
+                res.writeHead(500, {'Content-Type': 'application/json'})
+                res.end(JSON.stringify({error: {message: 'stub embeddings 故障'}}))
+                return
+            }
             const body = await readBody(req)
             res.writeHead(200, {'Content-Type': 'application/json'})
             res.end(JSON.stringify(deterministicEmbeddings(body)))
+            return
+        }
+        if (req.method === 'POST' && url === '/_embeddings-fail') {
+            const body = await readBody(req)
+            embeddingsFail = JSON.parse(body).on === true
+            res.writeHead(204)
+            res.end()
             return
         }
         if (req.method === 'GET' && url === '/_last') {
@@ -93,6 +117,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
         }
         if (req.method === 'GET' && url === '/_reset' || req.method === 'POST' && url === '/_reset') {
             lastChatRequest = null
+            embeddingsFail = false
             res.writeHead(204)
             res.end()
             return
