@@ -107,14 +107,17 @@ export interface ClientOptions {
     baseUrl?: string;
     /** 静态 token(D-4);经 Authorization 头注入,绝不进 URL */
     token: string;
+    /** 非空表示同源请求必不可用:调用方(桌面壳未配置连接)已判定,一切请求直接抛此可读文案 */
+    sameOriginBlocked?: string;
 }
 
-export function createClient({baseUrl = '', token}: ClientOptions) {
+export function createClient({baseUrl = '', token, sameOriginBlocked}: ClientOptions) {
     const headers = (): HeadersInit => ({
         Authorization: `Bearer ${token}`,
     })
 
     async function request<T>(path: string, init?: RequestInit): Promise<T> {
+        if (!baseUrl && sameOriginBlocked) throw new ApiError(0, sameOriginBlocked)
         let res: Response
         try {
             res = await fetch(baseUrl + path, {
@@ -137,6 +140,17 @@ export function createClient({baseUrl = '', token}: ClientOptions) {
         return res.blob() as unknown as Promise<T>
     }
 
+    /** 列表端点契约校验:2xx 必须是 JSON 数组。任何非数组(典型:Tauri 壳资产协议对
+     *  未命中路径回退 index.html → 200 text/html blob;或地址指向了别的服务)统一换
+     *  可读错误——否则非数组流入 UI state,渲染期 .map 崩溃整树卸载(白屏)。 */
+    async function requestList<T>(path: string): Promise<T[]> {
+        const value = await request<unknown>(path)
+        if (!Array.isArray(value)) {
+            throw new ApiError(0, '后端响应不是预期的列表数据:请确认连接设置里的地址指向 Reader 后端')
+        }
+        return value
+    }
+
     async function errorMessage(res: Response): Promise<string> {
         try {
             const body = await res.json()
@@ -152,7 +166,7 @@ export function createClient({baseUrl = '', token}: ClientOptions) {
 
         /** 书库列表(FR-103):新上传在前 */
         listBooks(): Promise<BookListItem[]> {
-            return request<BookListItem[]>('/api/books')
+            return requestList<BookListItem>('/api/books')
         },
 
         /** 书籍详情(含章节数等完整元数据)。 */
@@ -181,7 +195,7 @@ export function createClient({baseUrl = '', token}: ClientOptions) {
 
         /** 按书全量拉取(D-24) */
         listHighlights(bookId: number): Promise<Highlight[]> {
-            return request<Highlight[]>(`/api/books/${bookId}/highlights`)
+            return requestList<Highlight>(`/api/books/${bookId}/highlights`)
         },
 
         createHighlight(bookId: number, input: CreateHighlightInput): Promise<Highlight> {

@@ -45,3 +45,18 @@ export function normalizeBaseUrl(input: string): string {
     if (!/^https?:\/\//i.test(url)) url = `http://${url}`
     return url.replace(/\/+$/, '')
 }
+
+/**
+ * 壳内检测:页面 origin 是否 Tauri WebView 资产协议
+ * (Windows 为 http(s)://tauri.localhost,其余平台为 tauri://localhost)。
+ * 该 origin 下同源请求永不指向后端——资产协议对未命中路径一律回退 index.html
+ * (200 + text/html),即“未配置连接 + 同源回退”在壳内必失败。
+ */
+export function isTauriShell(): boolean {
+    try {
+        const {protocol, hostname} = window.location
+        return protocol === 'tauri:' || hostname === 'tauri.localhost' || hostname.endsWith('.tauri.localhost')
+    } catch {
+        return false
+    }
+}

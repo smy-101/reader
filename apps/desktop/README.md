@@ -30,3 +30,17 @@ cd apps/desktop && npx tauri build
 
 WebView2 页面 origin(`http://tauri.localhost`)与后端不同源,跨域 API 依赖后端全局 CORS
 (M2-01);token 仅经 Authorization 头,与浏览器端同一 api-client 代码路径。
+
+### 首启未配置连接(白屏事故记因,M2-03 排查续)
+
+未配置连接时同源回退(`fetch('/api/books')` 打到 `http://tauri.localhost`)在壳内必失败:
+Tauri 资产协议对未命中路径**一律回退 index.html(200 + text/html)**,api-client 收到
+2xx 非数组 → 曾直接 `setBooks(Blob)` → `filtered.map` 渲染崩溃整树卸载(白屏,
+压缩报错 `ll.map is not a function`)。双层防御:
+
+1. `connection.ts` `isTauriShell()` + `client.ts`:壳内未配置连接时,请求直抛可读文案
+   “桌面端尚未配置后端连接…”,书库页展示并引导打开连接设置(首启即 onboarding);
+2. api-client 列表端点契约守卫(`requestList`):任何 2xx 非数组响应换可读 ApiError,
+   杜绝同类“垃圾数据流入 UI state → 渲染崩溃”问题(浏览器端错指其它服务同受保护)。
+
+回归用例:`e2e/desktop-connection.spec.ts` “同源响应非列表(等效壳内资产回退)”。

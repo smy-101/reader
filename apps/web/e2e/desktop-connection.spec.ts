@@ -75,6 +75,28 @@ test('桌面等效连接:配绝对 URL + token → 列表→上传→打开→�
     await expect.poll(() => serverProgressAbsolute(page), {timeout: 15_000}).not.toBeNull()
 })
 
+test('同源响应非列表(等效壳内资产回退):可读报错不白屏,引导连接设置', async ({page}) => {
+    // 壳内真因回归:未配置连接时同源 fetch 打到 Tauri 资产协议,未命中路径回退
+    // index.html → 200 + text/html;曾致 setBooks(Blob) 后 filtered.map 崩溃白屏。
+    // 此处用路由拦截在浏览器里等效复刻该响应,验证 api-client 列表契约守卫。
+    await page.route('**/api/books', route =>
+        route.fulfill({
+            status: 200,
+            contentType: 'text/html',
+            body: '<!doctype html><html><body>index.html fallback</body></html>',
+        }))
+    await page.goto('/')
+
+    // 不白屏:页面结构仍在,可读错误 + 连接设置入口
+    await expect(page.locator('.load-error .error')).toContainText('不是预期的列表数据')
+    await expect(page.getByTestId('error-settings-open')).toBeVisible()
+    await expect(page.getByTestId('filter-input')).toBeVisible()
+
+    // 错误态可交互:连接设置弹窗能打开
+    await page.getByTestId('error-settings-open').click()
+    await expect(page.getByTestId('connection-dialog')).toBeVisible()
+})
+
 test('连接错误路径:不可达/错 token 可读提示,失败引导连接设置,恢复默认回退同源', async ({page}) => {
     await page.goto('/')
     await page.getByTestId('connection-settings-open').click()
