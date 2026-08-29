@@ -459,7 +459,7 @@ export function createClient({baseUrl = '', token, sameOriginBlocked}: ClientOpt
                 }
             }
             if (!sawTerminal) {
-                // 连接中断且无终精事件:不悬挂,显式报错
+                // 连接中断且无终态事件(done/error):不悬挂,显式报错
                 events.onError?.('AI 连接中断,请重试')
             }
         },

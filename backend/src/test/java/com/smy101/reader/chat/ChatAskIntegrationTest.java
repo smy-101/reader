@@ -282,6 +282,26 @@ class ChatAskIntegrationTest extends IntegrationTestBase {
         assertThat(res.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
+    @Test
+    void 上游收尾块content为null时不把字面量null流给用户() {
+        // OpenAI 兼容服务常在收尾块发 "content":null(Jackson NullNode.asText() 会返 "null")
+        STUB.chat(200, "sse:" + String.join("\n", List.of(
+                "{\"choices\":[{\"delta\":{\"content\":\"好的\"}}]}",
+                "{\"choices\":[{\"delta\":{\"content\":null}}]}",
+                "{\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}",
+                "[DONE]")));
+
+        ResponseEntity<String> res = ask(Map.of("content", "问"));
+
+        assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(res.getBody()).doesNotContain("\"text\":\"null\""); // 增量里不得出现字面量 null
+        assertThat(countOccurrences(res.getBody(), "event:delta")).isEqualTo(1); // 只有一块真增量
+        String content = jdbc.queryForObject(
+                "SELECT content FROM chat_message WHERE role = 'assistant'", String.class);
+        assertThat(content).isEqualTo("好的");
+        STUB.chatStream(List.of("你"));
+    }
+
     // ---- helpers ----
 
     private void saveSettings(Map<String, Object> overrides) {

@@ -47,7 +47,7 @@ class ChatSessionIntegrationTest extends IntegrationTestBase {
 
     @Test
     void 会话列表按最近活跃排序_新提问刷新活跃度() {
-        long first = askNewSession("第一场对话的问题");
+        long first = askNewSession("第一场会话的提问");
 
         // 第二场会话直接落库(M3 无显式新建入口;缺省路由只会落最近活跃,不会新开)
         jdbc.update("INSERT INTO chat_session (book_id, title) VALUES (?, '第二场对话')", bookId);

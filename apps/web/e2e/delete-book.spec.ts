@@ -35,7 +35,7 @@ test('删书确认弹窗明示级联范围_删除后书库与该书会话清净_
     await firstCard.getByTestId('book-card').click()
     await expect(page.getByTestId('reader-root')).toBeVisible()
     await page.getByTestId('ai-toggle').click()
-    await page.getByTestId('ai-input').fill('会随书删除的对话')
+    await page.getByTestId('ai-input').fill('会随书删除的会话内容')
     await page.getByTestId('ai-send').click()
     await expect(page.getByTestId('ai-assistant-msg').last()).toHaveText(E2E_STUB_REPLY_FULL)
     await page.getByTestId('back-to-library').click()

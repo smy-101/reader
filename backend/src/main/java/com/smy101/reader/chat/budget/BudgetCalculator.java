@@ -91,7 +91,9 @@ public final class BudgetCalculator {
         } else if (chapter != null && chapter <= limit) {
             mode = Mode.TARGET_CHAPTER;
             bookTokens = chapter;
-            degradeNote = "整书约 " + whole + " token,超出上下文预算 " + limit
+            degradeNote = (whole == null
+                    ? "整书内容超出上下文预算 " + limit
+                    : "整书约 " + whole + " token,超出上下文预算 " + limit)
                     + ",已降级为仅装入目标章";
         } else if (input.retrievalAvailable()) {
             mode = Mode.RETRIEVAL; // M4 翻真:检索式装配由调用方按此模式执行

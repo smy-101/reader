@@ -48,7 +48,7 @@ public class OpenAiCompatClient implements LlmAdapter {
 
     @Override
     public void streamChat(ChatCompletionRequest request, StreamListener listener) {
-        String url = trimTrailingSlash(request.baseUrl()) + "/chat/completions";
+        String url = LlmUrls.chatUrl(request.baseUrl());
         String body;
         try {
             body = objectMapper.writeValueAsString(new ChatCompletionsBody(
@@ -113,7 +113,6 @@ public class OpenAiCompatClient implements LlmAdapter {
                 lastChunkAt.set(System.nanoTime());
                 String payload = line.substring("data:".length()).strip();
                 if (payload.equals("[DONE]")) {
-                    listener.onCompleted();
                     completed = true;
                     return;
                 }
@@ -144,12 +143,11 @@ public class OpenAiCompatClient implements LlmAdapter {
         }
     }
 
-    /** 解析 data: {...choices[0].delta.content...};解析失败返回 null(跳过该块)。 */
+    /** 解析 data: {...choices[0].delta.content...};解析失败或非文本(如收尾块的 content:null)返回 null(跳过该块)。 */
     private String extractDelta(String payload) {
         try {
-            JsonNode root = objectMapper.readTree(payload);
-            JsonNode content = root.path("choices").path(0).path("delta").path("content");
-            return content.isMissingNode() ? null : content.asText();
+            JsonNode content = objectMapper.readTree(payload).path("choices").path(0).path("delta").path("content");
+            return content.isTextual() ? content.asText() : null;
         } catch (IOException e) {
             return null;
         }
@@ -166,14 +164,6 @@ public class OpenAiCompatClient implements LlmAdapter {
 
     private String formatMillis(long ms) {
         return ms >= 1000 ? (ms / 1000) + "s" : ms + "ms";
-    }
-
-    private String trimTrailingSlash(String baseUrl) {
-        String trimmed = baseUrl.strip();
-        while (trimmed.endsWith("/")) {
-            trimmed = trimmed.substring(0, trimmed.length() - 1);
-        }
-        return trimmed;
     }
 
     /** OpenAI 兼容请求体(messages + stream)。 */

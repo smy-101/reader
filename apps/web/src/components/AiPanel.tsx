@@ -136,8 +136,12 @@ export function AiPanel({bookId, view, relocateRef, pendingSelection, onClearPen
                 onMeta: meta => {
                     setMessages(prev => prev.map(m => (m.id === tempId ? {...m, id: meta.userMessageId} : m)))
                     setActiveId(meta.sessionId)
+                    // 新消息刷新活跃度:该会话置顶,面板次序与"最近活跃"口径一致
                     setSessions(prev => prev.some(s => s.id === meta.sessionId)
-                        ? prev.map(s => (s.id === meta.sessionId ? {...s, title: meta.sessionTitle} : s))
+                        ? [
+                            {...prev.find(s => s.id === meta.sessionId)!, title: meta.sessionTitle},
+                            ...prev.filter(s => s.id !== meta.sessionId),
+                        ]
                         : [{id: meta.sessionId, bookId, title: meta.sessionTitle, createdAt: '', updatedAt: ''}, ...prev])
                 },
                 onDelta: text => {

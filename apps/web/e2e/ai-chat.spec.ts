@@ -130,7 +130,7 @@ test('S1 划选 → 问 AI → 流式返回 → 选中引用落库(自动落最�
     await expect(page.getByTestId('reader-root')).toBeVisible()
     await waitForRendered(page)
 
-    // 先有一场 S2 对话(该书最近活跃会话存在)
+    // 先有一个 S2 会话(该书最近活跃会话存在)
     await page.getByTestId('ai-toggle').click()
     await page.getByTestId('ai-input').fill('先聊两句')
     await page.getByTestId('ai-send').click()

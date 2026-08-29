@@ -33,7 +33,7 @@ public class LlmProbe {
     public ProbeResult probe(String baseUrl, String apiKey) {
         String url;
         try {
-            url = trimTrailingSlash(baseUrl) + "/models";
+            url = LlmUrls.modelsUrl(baseUrl);
             HttpRequest request = HttpRequest.newBuilder(URI.create(url))
                     .timeout(Duration.ofMillis(timeoutMs))
                     .header("Authorization", "Bearer " + (apiKey == null ? "" : apiKey))
@@ -64,14 +64,6 @@ public class LlmProbe {
                     "接口不存在(404):Base URL 可能不正确,应形如 https://api.example.com/v1");
             default -> ProbeResult.failure("服务返回异常状态码 " + status);
         };
-    }
-
-    private String trimTrailingSlash(String baseUrl) {
-        String trimmed = baseUrl.strip();
-        while (trimmed.endsWith("/")) {
-            trimmed = trimmed.substring(0, trimmed.length() - 1);
-        }
-        return trimmed;
     }
 
     public record ProbeResult(boolean ok, String message) {
