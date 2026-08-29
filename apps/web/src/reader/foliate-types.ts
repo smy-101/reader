@@ -28,6 +28,11 @@ export interface FoliateRenderer {
     getAttribute(name: string): string | null
     getContents(): ContentEntry[]
     setStyles(css: string): void
+    /** 滚动模式(单章容器)滚动状态:只读 getters(paginator 公开面) */
+    readonly scrolled: boolean
+    readonly start: number
+    readonly end: number
+    readonly viewSize: number
 }
 
 export interface FoliateView extends HTMLElement {
@@ -36,6 +41,9 @@ export interface FoliateView extends HTMLElement {
     goTo(target: string | number): Promise<unknown>
     prev(): Promise<void>
     next(): Promise<void>
+    /** 方向键翻页用(内部按书籍 rtl 取向选 prev/next,上游演示页同款) */
+    goLeft(): Promise<void>
+    goRight(): Promise<void>
     close(): void
     getCFI(index: number, range: Range): string
     addAnnotation(annotation: { value: string; color?: string }): Promise<unknown>

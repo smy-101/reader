@@ -62,6 +62,19 @@ export function useHighlights(view: FoliateView | null, bookId: number, bookRead
             // overlayer 已由 ensureOverlayer 预热(拉取/创建前都 await 过),此处同步可用
             void ensureOverlayer().then(m => draw(m.Overlayer.highlight, {color: annotation.color ?? 'yellow'}))
         }
+        // section(重)渲染即重建 overlayer(目录跳走再跳回、同章重定位都会),而 view.js
+        // 只自动重画搜索结果——已存在划线须由宿主重 addAnnotation(上游演示页同款接线)
+        const onOverlayCreated = () => {
+            void ensureOverlayer().then(async () => {
+                for (const h of byCfiRef.current.values()) {
+                    try {
+                        await view.addAnnotation({value: h.cfi, color: h.color ?? undefined})
+                    } catch {
+                        // 脏 CFI:跳过本条,不阻断其余重画
+                    }
+                }
+            })
+        }
         const onShow = (e: Event) => {
             const {value} = (e as CustomEvent<{ value: string }>).detail
             const hit = byCfiRef.current.get(value)
@@ -87,10 +100,12 @@ export function useHighlights(view: FoliateView | null, bookId: number, bookRead
             })
         }
         view.addEventListener('draw-annotation', onDraw)
+        view.addEventListener('create-overlay', onOverlayCreated)
         view.addEventListener('show-annotation', onShow)
         view.addEventListener('load', onLoad)
         return () => {
             view.removeEventListener('draw-annotation', onDraw)
+            view.removeEventListener('create-overlay', onOverlayCreated)
             view.removeEventListener('show-annotation', onShow)
             view.removeEventListener('load', onLoad)
         }

@@ -26,6 +26,54 @@ export function Reader({bookId, onExit}: { bookId: number; onExit: () => void })
     const hl = useHighlights(view, bookId, status === 'ready')
     useAutoReportProgress(view, bookId, status === 'ready')
 
+    // 键盘翻页 + 滚动模式跨章(两个缺陷修复):
+    // - 键盘:vendor 不自带键盘处理(上游演示页同在宿主接);正文聚焦在 iframe 内,
+    //   键盘事件只到内容 doc,故 window 与每个 load 的 doc 都要挂;交互控件(按钮/目录项/输入)
+    //   自带 Enter/Space 语义,不劫持。
+    // - 跨章:滚动模式 vendor 现状是单章容器,滚到章底/章首无事发生;在边界继续滚轮时由
+    //   宿主触发 prev/next,冷却期防触控板动量连跳;分页模式交给 vendor 自身 snap,不介入。
+    useEffect(() => {
+        if (!view) return
+        const INTERACTIVE = 'input, textarea, select, [contenteditable="true"], a, button'
+        const onKey = (e: KeyboardEvent) => {
+            if (e.altKey || e.metaKey || e.ctrlKey) return
+            if (e.target instanceof Element && e.target.closest(INTERACTIVE)) return
+            const k = e.key
+            const isPrev = k === 'ArrowLeft' || k === 'PageUp'
+            const isNext = k === 'ArrowRight' || k === 'PageDown' || k === 'Enter' || k === ' '
+            if (!isPrev && !isNext) return
+            e.preventDefault()
+            void (isPrev ? view.goLeft() : view.goRight())
+        }
+        let lastJump = 0
+        const onWheel = (e: WheelEvent) => {
+            const r = view.renderer
+            if (!r?.scrolled || e.deltaY === 0) return
+            const now = performance.now()
+            if (now - lastJump < 350) return
+            const forward = e.deltaY > 0
+            const atBoundary = forward ? r.viewSize - r.end <= 2 : r.start <= 0
+            if (!atBoundary) return
+            lastJump = now
+            void (forward ? view.next() : view.prev())
+        }
+        const onLoad = (e: Event) => {
+            const {doc} = (e as CustomEvent<{ doc: Document }>).detail
+            doc.addEventListener('keydown', onKey)
+            doc.addEventListener('wheel', onWheel, {passive: true})
+        }
+        window.addEventListener('keydown', onKey)
+        view.addEventListener('load', onLoad)
+        // 光标在正文 iframe 内时 wheel 发生在内容 doc(上方 load 已挂);在 iframe 外的
+        // 边距/背景上时事件经闭 shadow 重定向到本元素——两路都接才能全屏命中
+        view.addEventListener('wheel', onWheel, {passive: true})
+        return () => {
+            window.removeEventListener('keydown', onKey)
+            view.removeEventListener('load', onLoad)
+            view.removeEventListener('wheel', onWheel)
+        }
+    }, [view])
+
     // 打开书:详情(标题)+ 书源文件 + 服务端进度(接续到上次位置,FR-203)→ makeBook → view.open
     const openBook = useCallback(async (v: FoliateView) => {
         setView(v)
