@@ -73,6 +73,7 @@ public abstract class IntegrationTestBase {
         jdbc.update("DELETE FROM reading_progress");
         jdbc.update("DELETE FROM chapter");
         jdbc.update("DELETE FROM book");
+        jdbc.update("DELETE FROM model_settings");
         try (Stream<Path> entries = Files.list(STORAGE_ROOT)) {
             for (Path entry : entries.sorted(Comparator.reverseOrder()).toList()) {
                 deleteRecursively(entry);

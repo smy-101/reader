@@ -87,6 +87,44 @@ export interface UpsertProgressInput {
     percent: number;
 }
 
+// ---- 模型设置(M3,FR-401:5+2 项) ----
+
+/** 单套配置(id 恒 1);api key 明文回显(FR-404 已接受姿态)。
+ * 可空项语义:上下文上限空 = 按 8k 保守(D-27);embedding 独立配置空 = 跟随 chat(D-28)。 */
+export interface ModelSettings {
+    id: number;
+    baseUrl: string | null;
+    apiKey: string | null;
+    chatModel: string | null;
+    chatContextTokens: number | null;
+    embeddingModel: string | null;
+    embeddingBaseUrl: string | null;
+    embeddingApiKey: string | null;
+    updatedAt: string | null;
+}
+
+export interface ModelSettingsInput {
+    baseUrl: string;
+    apiKey?: string | null;
+    chatModel: string;
+    chatContextTokens?: number | null;
+    embeddingModel?: string | null;
+    embeddingBaseUrl?: string | null;
+    embeddingApiKey?: string | null;
+}
+
+/** 测试连接单探针结果(FR-405);skipped 仅 embedding 未配置时出现 */
+export interface ProbeOutcome {
+    ok: boolean;
+    skipped: boolean;
+    message: string;
+}
+
+export interface TestConnectionResult {
+    chat: ProbeOutcome;
+    embedding: ProbeOutcome;
+}
+
 // ---- 错误 ----
 
 /** 非 2xx 响应统一错误;message 来自后端可读文案({"error": ...})。 */
@@ -237,6 +275,31 @@ export function createClient({baseUrl = '', token, sameOriginBlocked}: ClientOpt
                 method: 'PUT',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(input),
+            })
+        },
+
+        // ---- 模型设置 ----
+
+        /** 读取单套配置;从未保存过返回全空字段(空表单) */
+        getModelSettings(): Promise<ModelSettings> {
+            return request<ModelSettings>('/api/settings/model')
+        },
+
+        /** 保存(整行覆盖);base URL 与 chat 模型必填 */
+        saveModelSettings(input: ModelSettingsInput): Promise<ModelSettings> {
+            return request<ModelSettings>('/api/settings/model', {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(input),
+            })
+        },
+
+        /** 测试连接(FR-405):chat 与 embedding 双探针;不传 input 则测已保存配置 */
+        testModelConnection(input?: ModelSettingsInput): Promise<TestConnectionResult> {
+            return request<TestConnectionResult>('/api/settings/model/test', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: input ? JSON.stringify(input) : undefined,
             })
         },
     }

@@ -15,6 +15,7 @@ public class ReaderProperties {
 
     private final Auth auth = new Auth();
     private final Storage storage = new Storage();
+    private final Llm llm = new Llm();
 
     @Getter
     @Setter
@@ -28,5 +29,12 @@ public class ReaderProperties {
     public static class Storage {
         /** 书源文件与封面落盘根目录 */
         private String root;
+    }
+
+    @Getter
+    @Setter
+    public static class Llm {
+        /** 测试连接探针超时毫秒数(FR-405) */
+        private long probeTimeoutMs = 5000;
     }
 }

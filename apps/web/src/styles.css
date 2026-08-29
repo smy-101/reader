@@ -234,6 +234,21 @@ button {
     box-shadow: 0 12px 40px #0003;
 }
 
+/* 模型设置 7 项字段较长:限高滚动,不遮屏 */
+.dialog.model-settings {
+    width: min(480px, calc(100vw - 48px));
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+}
+
+.probe-results {
+    margin: 4px 0 8px;
+}
+
+.probe-results .test-result {
+    margin: 4px 0;
+}
+
 .dialog h2 {
     margin: 0 0 4px;
     font-size: 18px;

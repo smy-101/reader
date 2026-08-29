@@ -31,3 +31,6 @@ reader:
   storage:
     # 书源文件与封面落盘根目录(需求文档 .gitignore 口径:目录不入库)
     root: ${READER_DATA_DIR:./data}
+  llm:
+    # 测试连接探针超时(FR-405);提问链路的上游超时在 LlmClient 内单独控制
+    probe-timeout-ms: ${READER_LLM_PROBE_TIMEOUT_MS:5000}

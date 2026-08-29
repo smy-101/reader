@@ -3,6 +3,7 @@ import type {BookListItem} from '@reader/api-client'
 import {api} from '../client'
 import {BookCard} from '../components/BookCard'
 import {ConnectionSettings} from '../components/ConnectionSettings'
+import {ModelSettingsPanel} from '../components/ModelSettingsPanel'
 import {UploadPanel, type UploadResult} from '../components/UploadPanel'
 
 /** 书库页(FR-103/106):封面、标题、作者、进度;标题/作者即时过滤;单/批量上传。 */
@@ -12,6 +13,7 @@ export function Library({onOpen}: { onOpen: (bookId: number) => void }) {
     const [loading, setLoading] = useState(true)
     const [filter, setFilter] = useState('')
     const [settingsOpen, setSettingsOpen] = useState(false)
+    const [modelSettingsOpen, setModelSettingsOpen] = useState(false)
 
     const refresh = useCallback(async () => {
         setLoading(true)
@@ -55,6 +57,13 @@ export function Library({onOpen}: { onOpen: (bookId: number) => void }) {
                     >
                         连接设置
                     </button>
+                    <button
+                        className="link-button"
+                        onClick={() => setModelSettingsOpen(true)}
+                        data-testid="model-settings-open"
+                    >
+                        AI 设置
+                    </button>
                 </div>
             </header>
 
@@ -92,6 +101,7 @@ export function Library({onOpen}: { onOpen: (bookId: number) => void }) {
             )}
 
             {settingsOpen && <ConnectionSettings onClose={() => setSettingsOpen(false)}/>}
+            {modelSettingsOpen && <ModelSettingsPanel onClose={() => setModelSettingsOpen(false)}/>}
         </main>
     )
 }
